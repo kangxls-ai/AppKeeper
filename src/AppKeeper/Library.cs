@@ -20,6 +20,7 @@ internal sealed class Entry
     public Guid? Group { get; set; }
     public bool Inbox { get; set; }
     public bool Missing { get; set; }
+    public List<string> Tags { get; set; } = [];
 }
 
 internal sealed class Library
@@ -30,7 +31,12 @@ internal sealed class Library
     public bool StartWithWindows { get; set; } = true;
     public uint Modifiers { get; set; } = 1;
     public int Key { get; set; } = 32;
+    public List<string> Tags { get; set; } = [];
+    public BallPosition? Ball { get; set; }
 }
+
+internal sealed record BallPosition(int X, int Y, string Monitor, DockEdge Edge);
+internal enum DockEdge { None, Left, Top, Right, Bottom }
 
 internal sealed class LibraryStore(string directory)
 {
@@ -112,16 +118,21 @@ internal sealed class LibraryStore(string directory)
             throw new InvalidDataException("备份文件超过 64 MB。");
         var data = JsonSerializer.Deserialize<Library>(file, Json);
         if (data is not { Version: 1 } || data.Entries == null || data.Ignored == null ||
-            data.Key is < 1 or > 254 || data.Modifiers is 0 or > 15)
+            data.Key is < 1 or > 254 || data.Modifiers is 0 or > 15 ||
+            data.Tags == null || data.Tags.Any(tag => !Layout.IsTagName(tag)) ||
+            data.Tags.Distinct(StringComparer.OrdinalIgnoreCase).Count() != data.Tags.Count ||
+            (data.Ball != null && (string.IsNullOrWhiteSpace(data.Ball.Monitor) || !Enum.IsDefined(data.Ball.Edge))))
             throw new InvalidDataException("配置版本或格式无效。");
 
         var ids = new HashSet<Guid>();
         var groups = data.Entries.Where(entry => entry?.Kind == EntryKind.Group)
             .Select(entry => entry.Id).ToHashSet();
+        var tags = data.Tags.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in data.Entries)
         {
             if (entry == null || entry.Id == Guid.Empty || !ids.Add(entry.Id) ||
                 string.IsNullOrWhiteSpace(entry.Name) || entry.Target == null || !Enum.IsDefined(entry.Kind) ||
+                entry.Tags == null || entry.Tags.Any(tag => tag == null || !tags.Contains(tag)) ||
                 (entry.Group.HasValue && (!groups.Contains(entry.Group.Value) || entry.Inbox)) ||
                 (entry.Kind == EntryKind.Group && (entry.Group.HasValue || entry.Inbox)) ||
                 (entry.Kind == EntryKind.Web && !WindowsCatalog.IsWeb(entry.Target)) ||

@@ -1,0 +1,13 @@
+<Window x:Class="AppKeeper.FloatingBall"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AppKeeper 浮球" Width="50" Height="50" WindowStyle="None" ResizeMode="NoResize"
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False" ShowActivated="False"
+        Topmost="True" Focusable="False">
+    <Border x:Name="Face" CornerRadius="25" BorderBrush="#B7D5EBFF" BorderThickness="1"
+            Background="#F334516D" Cursor="Hand" ToolTip="AppKeeper · 悬停打开，按住拖动"
+            MouseEnter="OpenOnHover" MouseLeftButtonDown="BeginDrag"
+            MouseMove="ContinueDrag" MouseLeftButtonUp="FinishDrag" LostMouseCapture="CancelDrag">
+        <Image Source="Assets/AppKeeper.ico" Width="34" Height="34" IsHitTestVisible="False"/>
+    </Border>
+</Window>

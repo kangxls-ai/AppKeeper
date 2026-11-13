@@ -35,8 +35,13 @@ internal static class SelfTest
             Layout.Move(data, second, first, DropAction.Into);
             var group = data.Entries.Single(entry => entry.Kind == EntryKind.Group);
             Check(first.Group == group.Id && second.Group == group.Id, "create group");
-            Layout.MoveHome(data, second);
-            Check(second.Group == null && !second.Inbox, "move out of group");
+            Layout.Move(data, second, third, Layout.DropAt(second, third, .5, insideFolder: false));
+            Check(second.Group == null && !second.Inbox && data.Entries[1] == second, "drag to home tile");
+            data.Tags.Add("工作");
+            first.Tags.Add("工作");
+            Check(Layout.Visible(data, false, "", "工作").SequenceEqual([first]), "tag finds grouped app");
+            Check(Layout.Visible(data, false, "example", "工作").SequenceEqual([first]), "search with tag");
+            data.Ball = new BallPosition(40, 90, @"\\.\DISPLAY1", DockEdge.Left);
 
             var appId = "Sample_123!App";
             var discovered = new Entry { Name = "示例应用", DefaultName = "示例应用", Target = appId,
@@ -70,6 +75,12 @@ internal static class SelfTest
             restored.Entries[0].Icon = "cG5n";
             store.Export(export, restored);
             Check(LibraryStore.Read(export).Entries[0].Icon == "cG5n", "export embedded icon");
+            var imported = LibraryStore.Read(export);
+            Check(imported.Ball == data.Ball && imported.Tags.SequenceEqual(["工作"]) &&
+                imported.Entries.Single(entry => entry.Id == first.Id).Tags.SequenceEqual(["工作"]),
+                "export and restore tags and ball position");
+            Layout.RemoveTag(imported, "工作");
+            Check(imported.Tags.Count == 0 && imported.Entries.All(entry => entry.Tags.Count == 0), "delete tag");
             File.WriteAllText(export, """{"Version":99}""");
             try
             {

@@ -24,6 +24,7 @@ public partial class App : Application
     private System.Drawing.Icon? trayIcon;
     private DispatcherTimer? scanTimer;
     private MainWindow? launcher;
+    private FloatingBall? ball;
     private Library data = new();
     private bool writable = true;
     private bool scanning;
@@ -80,6 +81,13 @@ public partial class App : Application
         messages.AddHook(OnMessage);
         RegisterShortcut();
         CreateTray();
+        ball = new FloatingBall(ShowHomeFromBall, position =>
+        {
+            if (writable)
+                Commit(library => library.Ball = position);
+        });
+        ball.Present(data.Ball);
+        SystemEvents.DisplaySettingsChanged += DisplaySettingsChanged;
         if (writable)
             ApplyAutostart();
 
@@ -108,7 +116,11 @@ public partial class App : Application
         menu.Items.Add("设置", null, (_, _) => GetLauncher().ShowSettingsFromTray());
         menu.Items.Add("重新扫描应用", null, async (_, _) => await Refresh(showResult: true));
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("退出 AppKeeper", null, (_, _) => Shutdown());
+        menu.Items.Add("退出 AppKeeper", null, (_, _) =>
+        {
+            launcher?.CloseForExit();
+            Shutdown();
+        });
         using var stream = GetResourceStream(new Uri("Assets/AppKeeper.ico", UriKind.Relative)).Stream;
         trayIcon = new System.Drawing.Icon(stream);
         tray = new Forms.NotifyIcon { Icon = trayIcon, Text = "AppKeeper", ContextMenuStrip = menu, Visible = true };
@@ -121,6 +133,9 @@ public partial class App : Application
 
     private MainWindow GetLauncher() => launcher ??= new MainWindow(this);
     private void ShowLauncher() => GetLauncher().Reveal();
+    private void ShowHomeFromBall() => GetLauncher().RevealHome();
+    private void DisplaySettingsChanged(object? sender, EventArgs args) =>
+        Dispatcher.BeginInvoke(() => ball?.Place(data.Ball));
 
     private void ToggleLauncher()
     {
@@ -209,6 +224,7 @@ public partial class App : Application
             var imported = LibraryStore.Read(path);
             store.Save(imported);
             data = imported;
+            ball?.Place(data.Ball);
             writable = true;
             notice = "已导入备份。";
             RegisterShortcut();
@@ -314,10 +330,6 @@ public partial class App : Application
             handled = true;
             _ = Dispatcher.BeginInvoke(ToggleLauncher);
         }
-        else if (message is 0x007E or 0x02E0)
-        {
-            _ = Dispatcher.BeginInvoke(() => launcher?.FitMonitor());
-        }
         return IntPtr.Zero;
     }
 
@@ -331,6 +343,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
         scanTimer?.Stop();
         showWait?.Unregister(null);
         showEvent?.Dispose();

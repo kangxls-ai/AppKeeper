@@ -8,14 +8,36 @@ internal enum DropAction { Before, After, Into }
 
 internal static class Layout
 {
-    public static IEnumerable<Entry> Visible(Library library, bool inbox, string query) =>
-        query.Length > 0
-            ? library.Entries.Where(entry => Pinyin.Matches(entry.Name, query))
-            : library.Entries.Where(entry => !entry.Group.HasValue && entry.Inbox == inbox);
+    public static IEnumerable<Entry> Visible(Library library, bool inbox, string query, string? tag = null)
+    {
+        var entries = tag == null ? library.Entries :
+            library.Entries.Where(entry => entry.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase));
+        return query.Length > 0
+            ? entries.Where(entry => Pinyin.Matches(entry.Name, query))
+            : entries.Where(entry => (tag != null || !entry.Group.HasValue) && entry.Inbox == inbox);
+    }
+
+    public static bool IsTagName(string? tag) =>
+        tag is { Length: > 0 and <= 24 } && tag == tag.Trim() && !tag.Any(char.IsControl);
+
+    public static void RemoveTag(Library library, string tag)
+    {
+        library.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
+        foreach (var entry in library.Entries)
+            entry.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
+    }
 
     public static bool CanMove(Entry source, Entry target, DropAction action) =>
         source.Id != target.Id && (source.Kind != EntryKind.Group ||
             (action != DropAction.Into && !target.Group.HasValue && !target.Inbox));
+
+    public static DropAction DropAt(Entry source, Entry target, double position, bool insideFolder)
+    {
+        if (!insideFolder && !source.Group.HasValue && source.Kind != EntryKind.Group &&
+            position is >= .28 and <= .72)
+            return DropAction.Into;
+        return position < .5 ? DropAction.Before : DropAction.After;
+    }
 
     public static void Move(Library library, Entry source, Entry target, DropAction action)
     {

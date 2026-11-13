@@ -1,6 +1,7 @@
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -31,7 +32,10 @@ public partial class MainWindow : Window
     private bool inbox;
     private bool dragging;
     private bool ready;
+    private bool draggingOut;
+    private bool closingForExit;
     private Guid? openFolder;
+    private string? selectedTag;
     private string Query => SearchBox.Text.Trim();
 
     internal MainWindow(App app)
@@ -49,8 +53,8 @@ public partial class MainWindow : Window
 
     private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message is 0x007E or 0x02E0)
-            _ = Dispatcher.BeginInvoke(() => FitMonitor(useCursor: false));
+        if (message == 0x007E && IsVisible)
+            _ = Dispatcher.BeginInvoke(CenterOnCursorMonitor);
         return IntPtr.Zero;
     }
 
@@ -63,22 +67,50 @@ public partial class MainWindow : Window
         }
 
         _ = new WindowInteropHelper(this).EnsureHandle();
-        FitMonitor();
+        CenterOnCursorMonitor();
         Show();
-        FitMonitor();
         Activate();
         RefreshData();
         SearchBox.Focus();
         Root.BeginAnimation(OpacityProperty, new DoubleAnimation(.8, 1, TimeSpan.FromMilliseconds(135)));
     }
 
-    internal void FitMonitor(bool useCursor = true)
+    internal void RevealHome()
     {
-        if (handle == IntPtr.Zero || (!IsVisible && !useCursor))
+        if (!IsVisible)
+        {
+            selectedTag = null;
+            SwitchSection(false);
+        }
+        Reveal();
+    }
+
+    private void CenterOnCursorMonitor()
+    {
+        var cursor = Forms.Cursor.Position;
+        var area = Forms.Screen.FromPoint(cursor).WorkingArea;
+        var scale = VisualTreeHelper.GetDpi(this);
+        var monitor = MonitorFromPoint(cursor, 2);
+        if (GetDpiForMonitor(monitor, 0, out var dpiX, out var dpiY) == 0)
+            scale = new DpiScale(dpiX / 96d, dpiY / 96d);
+        var width = Math.Min(area.Width, (int)Math.Round(Width * scale.DpiScaleX));
+        var height = Math.Min(area.Height, (int)Math.Round(Height * scale.DpiScaleY));
+        SetWindowPos(handle, IntPtr.Zero, area.Left + (area.Width - width) / 2,
+            area.Top + (area.Height - height) / 2, width, height, 0x0014);
+    }
+
+    internal void CloseForExit()
+    {
+        closingForExit = true;
+        Close();
+    }
+
+    private void HideOnClose(object? sender, CancelEventArgs e)
+    {
+        if (closingForExit)
             return;
-        var monitor = useCursor ? Forms.Screen.FromPoint(Forms.Cursor.Position) : Forms.Screen.FromHandle(handle);
-        var bounds = monitor.Bounds;
-        SetWindowPos(handle, IntPtr.Zero, bounds.X, bounds.Y, bounds.Width, bounds.Height, 0x0014);
+        e.Cancel = true;
+        Conceal();
     }
 
     internal void Conceal()
@@ -92,7 +124,7 @@ public partial class MainWindow : Window
     {
         if (!ready)
             return;
-        StatusText.Text = app.Status.Length > 0 ? app.Status : "拖动图标边缘排序，拖到中央创建文件夹";
+        StatusText.Text = app.Status.Length > 0 ? app.Status : "拖到图标边缘排序，拖到中央分组";
     }
 
     internal void RefreshData()
@@ -104,8 +136,11 @@ public partial class MainWindow : Window
         HomeButton.Background = Query.Length == 0 && !inbox ? activeBrush : Brushes.Transparent;
         InboxButton.Background = Query.Length == 0 && inbox ? activeBrush : Brushes.Transparent;
         SearchHint.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (IsVisible)
+        if (selectedTag != null && !app.Data.Tags.Contains(selectedTag, StringComparer.OrdinalIgnoreCase))
+            selectedTag = null;
+        if (IsVisible && !dragging)
         {
+            RenderTags();
             RenderTiles();
             RenderFolder();
         }
@@ -120,7 +155,7 @@ public partial class MainWindow : Window
         var columns = Math.Max(1, Math.Min(12, (int)(width / 112)));
         var rows = Math.Max(1, Math.Min(7, (int)(height / 104)));
         var size = columns * rows;
-        var matches = Layout.Visible(app.Data, inbox, Query).ToList();
+        var matches = Layout.Visible(app.Data, inbox, Query, selectedTag).ToList();
         pages = Math.Max(1, (matches.Count + size - 1) / size);
         page = Math.Clamp(page, 0, pages - 1);
         Tiles.Columns = columns;
@@ -130,8 +165,9 @@ public partial class MainWindow : Window
         foreach (var entry in matches.Skip(page * size).Take(size))
             Tiles.Children.Add(Tile(entry, false));
         EmptyState.Visibility = matches.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EmptyTitle.Text = Query.Length > 0 ? "没有匹配的应用" : inbox ? "待整理区为空" : "还没有已整理的应用";
-        EmptyDetail.Text = Query.Length > 0 ? "试试应用名称、全拼或首字母" :
+        EmptyTitle.Text = Query.Length > 0 || selectedTag != null ? "没有匹配的应用" : inbox ? "待整理区为空" : "还没有已整理的应用";
+        EmptyDetail.Text = selectedTag != null ? "可在应用的右键菜单中设置标签" :
+            Query.Length > 0 ? "试试应用名称、全拼或首字母" :
             inbox ? "新发现的应用会出现在这里" : "从「待整理」移动应用，或使用「添加」创建入口";
         PageLabel.Text = $"{page + 1} / {pages}";
         PreviousButton.IsEnabled = page > 0;
@@ -160,7 +196,7 @@ public partial class MainWindow : Window
         tile.Click += (_, _) => ActivateEntry(entry);
         tile.ContextMenu = MenuFor(entry);
 
-        if (Query.Length == 0)
+        if (Query.Length == 0 && selectedTag == null)
         {
             Point? origin = null;
             tile.PreviewMouseLeftButtonDown += (_, e) => origin = e.GetPosition(tile);
@@ -181,6 +217,10 @@ public partial class MainWindow : Window
                 {
                     dragging = false;
                     edgeTimer.Stop();
+                    if (draggingOut)
+                        CloseFolder();
+                    draggingOut = false;
+                    RefreshData();
                 }
                 e.Handled = true;
             };
@@ -189,7 +229,7 @@ public partial class MainWindow : Window
             {
                 if (Dragged(e) is not { } source)
                     return;
-                var action = DropPosition(tile, e, insideFolder);
+                var action = DropPosition(tile, e, source, entry, insideFolder);
                 var canMove = Layout.CanMove(source, entry, action);
                 tile.Background = canMove ? activeBrush : Brushes.Transparent;
                 e.Effects = canMove ? DragDropEffects.Move : DragDropEffects.None;
@@ -201,7 +241,7 @@ public partial class MainWindow : Window
             {
                 if (Dragged(e) is not { } source)
                     return;
-                var action = DropPosition(tile, e, insideFolder);
+                var action = DropPosition(tile, e, source, entry, insideFolder);
                 if (Layout.CanMove(source, entry, action))
                     app.Commit(library => Layout.Move(library, source, entry, action));
                 e.Handled = true;
@@ -266,6 +306,27 @@ public partial class MainWindow : Window
         AddItem(menu, "更换图标…", () => ChangeIcon(entry));
         if (entry.Icon != null)
             AddItem(menu, "恢复默认图标", () => app.Commit(_ => entry.Icon = null));
+        if (entry.Kind != EntryKind.Group)
+        {
+            var tags = new MenuItem { Header = "标签" };
+            foreach (var tag in app.Data.Tags)
+            {
+                var item = new MenuItem { Header = new TextBlock { Text = tag }, IsCheckable = true,
+                    IsChecked = entry.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase) };
+                item.Click += (_, _) => app.Commit(_ =>
+                {
+                    if (item.IsChecked)
+                        entry.Tags.Add(tag);
+                    else
+                        entry.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
+                });
+                tags.Items.Add(item);
+            }
+            if (tags.Items.Count > 0)
+                tags.Items.Add(new Separator());
+            AddItem(tags, "新建并添加…", () => AddTag(entry));
+            menu.Items.Add(tags);
+        }
         if (entry.Group.HasValue || entry.Inbox)
             AddItem(menu, "移到应用页", () => app.Commit(library => Layout.MoveHome(library, entry)));
 
@@ -337,9 +398,9 @@ public partial class MainWindow : Window
             return;
 
         FolderTitle.Text = folder.Name;
-        FolderPanel.Width = Math.Max(310, Math.Min(655, ActualWidth - 54));
-        FolderTiles.Columns = Math.Clamp((int)((FolderPanel.Width - 48) / 113), 2, 5);
-        FolderScroller.MaxHeight = Math.Max(100, Math.Min(450, ActualHeight - 135));
+        FolderPanel.Width = Math.Max(200, Math.Min(535, ActualWidth - 64));
+        FolderTiles.Columns = Math.Clamp((int)((FolderPanel.Width - 28) / 105), 1, 5);
+        FolderScroller.MaxHeight = Math.Max(95, Math.Min(335, ActualHeight - 185));
         foreach (var child in app.Data.Entries.Where(entry => entry.Group == folder.Id))
             FolderTiles.Children.Add(Tile(child, true));
         if (FolderTiles.Children.Count == 0)
@@ -353,24 +414,38 @@ public partial class MainWindow : Window
         FolderTiles.Children.Clear();
     }
 
-    private static DropAction DropPosition(Button tile, DragEventArgs e, bool insideFolder)
+    private static DropAction DropPosition(Button tile, DragEventArgs e, Entry source, Entry target, bool insideFolder)
     {
         var x = e.GetPosition(tile).X / Math.Max(1, tile.ActualWidth);
-        if (!insideFolder && x is >= .28 and <= .72)
-            return DropAction.Into;
-        return x < .5 ? DropAction.Before : DropAction.After;
+        return Layout.DropAt(source, target, x, insideFolder);
     }
 
     private Entry? Dragged(DragEventArgs e) => dragging &&
         e.Data.GetDataPresent(DragFormat, false) && e.Data.GetData(DragFormat, false) is string value &&
         Guid.TryParse(value, out var id) ? app.Data.Entries.Find(entry => entry.Id == id) : null;
 
+    private void RevealHomeForDrag(object sender, DragEventArgs e)
+    {
+        if (!openFolder.HasValue || draggingOut || Dragged(e) is not { Group: not null })
+            return;
+        var cursor = e.GetPosition(FolderPanel);
+        if (new Rect(FolderPanel.RenderSize).Contains(cursor))
+            return;
+
+        draggingOut = true;
+        openFolder = null;
+        inbox = false;
+        FolderShade.Visibility = Visibility.Collapsed;
+        RenderTiles();
+        RefreshStatus();
+    }
+
     private void WindowDragOver(object sender, DragEventArgs e)
     {
         if (Dragged(e) is { } source && !openFolder.HasValue)
         {
             var x = e.GetPosition(this).X;
-            var direction = x < 60 ? -1 : x > ActualWidth - 60 ? 1 : 0;
+            var direction = x < 15 ? -1 : x > ActualWidth - 15 ? 1 : 0;
             if (direction != 0 && page + direction >= 0 && page + direction < pages)
             {
                 if (edgeDirection != direction)
@@ -416,7 +491,10 @@ public partial class MainWindow : Window
     private void OutDrop(object sender, DragEventArgs e)
     {
         if (Dragged(e) is { } entry)
+        {
             app.Commit(library => Layout.MoveHome(library, entry));
+            CloseFolder();
+        }
         e.Handled = true;
     }
 
@@ -547,17 +625,77 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void DismissOnBlank(object sender, MouseButtonEventArgs e)
+    private void RenderTags()
     {
-        var node = e.OriginalSource as DependencyObject;
-        while (node != null)
+        TagBar.Children.Clear();
+        foreach (var tag in new string?[] { null }.Concat(app.Data.Tags))
         {
-            if (node is Button or TextBox or ScrollBar || node == FolderPanel)
-                return;
-            node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+            var button = new Button { Content = tag ?? "全部", FontSize = 12,
+                Margin = new Thickness(0, 0, 5, 0), Padding = new Thickness(9, 4, 9, 4),
+                Background = tag == selectedTag ? activeBrush : Brushes.Transparent };
+            button.Click += (_, _) =>
+            {
+                selectedTag = tag;
+                page = 0;
+                RefreshData();
+            };
+            if (tag != null)
+            {
+                var menu = new ContextMenu();
+                AddItem(menu, "删除标签", () =>
+                {
+                    if (MessageBox.Show(this, $"删除「{tag}」及其应用关联？", "删除标签",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                        app.Commit(data => Layout.RemoveTag(data, tag));
+                });
+                button.ContextMenu = menu;
+            }
+            TagBar.Children.Add(button);
         }
-        Conceal();
-        e.Handled = true;
+    }
+
+    private void AddTag(Entry? entry)
+    {
+        if (Dialogs.Text(this, "新建标签", "标签名称（最多 24 个字符）", "") is not { } tag)
+            return;
+        if (!Layout.IsTagName(tag) || app.Data.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
+        {
+            app.Error("请输入 1 至 24 个字符的标签名称，且名称不能重复。");
+            return;
+        }
+        app.Commit(data =>
+        {
+            data.Tags.Add(tag);
+            entry?.Tags.Add(tag);
+        });
+    }
+
+    private void CreateTag(object sender, RoutedEventArgs e) => AddTag(null);
+
+    private void DismissFolder(object sender, MouseButtonEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, FolderShade))
+            CloseFolder();
+    }
+
+    private void HideOnBlank(object sender, MouseButtonEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, TileArea))
+            Conceal();
+    }
+
+    private void MoveWindow(object sender, MouseButtonEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, sender))
+            DragMove();
+    }
+
+    private void ResizeWindow(object sender, DragDeltaEventArgs e)
+    {
+        var area = Forms.Screen.FromHandle(handle).WorkingArea;
+        var scale = VisualTreeHelper.GetDpi(this);
+        Width = Math.Clamp(Width + e.HorizontalChange, MinWidth, Math.Max(MinWidth, area.Width / scale.DpiScaleX));
+        Height = Math.Clamp(Height + e.VerticalChange, MinHeight, Math.Max(MinHeight, area.Height / scale.DpiScaleY));
     }
 
     private void ResizeTiles(object sender, SizeChangedEventArgs e) => RefreshData();
@@ -572,4 +710,10 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(System.Drawing.Point point, uint flags);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint x, out uint y);
 }
