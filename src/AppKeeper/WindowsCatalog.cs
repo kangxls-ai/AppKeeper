@@ -287,7 +287,11 @@ internal sealed record CatalogSnapshot(Dictionary<string, Entry> Apps, bool Stor
         {
             if (data.Ignored.Contains(entry.Source!) || data.Ignored.Contains("target:" + entry.Target))
                 continue;
-            data.Entries.Add(entry);
+            data.Entries.Add(new Entry
+            {
+                Kind = entry.Kind, Name = entry.Name, DefaultName = entry.DefaultName,
+                Target = entry.Target, Source = entry.Source, Inbox = true
+            });
             changed = true;
         }
         return changed;

@@ -39,11 +39,15 @@ internal static class SelfTest
             Check(second.Group == null && !second.Inbox, "move out of group");
 
             var appId = "Sample_123!App";
-            var candidate = new Entry { Name = "示例应用", DefaultName = "示例应用", Target = appId,
+            var discovered = new Entry { Name = "示例应用", DefaultName = "示例应用", Target = appId,
                 Source = "store:" + appId, Kind = EntryKind.Store, Inbox = true };
             var catalog = new CatalogSnapshot(new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase)
-                { [candidate.Source] = candidate }, true, "");
-            Check(catalog.Merge(data) && data.Entries[^1] == candidate, "discovery preserves ordering");
+                { [discovered.Source] = discovered }, true, "");
+            var priorOrder = data.Entries.Select(entry => entry.Id).ToArray();
+            Check(catalog.Merge(data) && data.Entries.Take(priorOrder.Length).Select(entry => entry.Id).SequenceEqual(priorOrder),
+                "discovery preserves ordering");
+            var candidate = data.Entries[^1];
+            Check(candidate.Inbox && candidate.Target == appId, "discovery adds to inbox");
             candidate.Name = "自定义名称";
             Check(!catalog.Merge(data) && candidate.Name == "自定义名称", "discovery preserves rename");
             var missingCatalog = new CatalogSnapshot(new(), false, "");

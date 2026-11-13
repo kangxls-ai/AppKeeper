@@ -172,13 +172,18 @@ public partial class App : Application
                 return;
             if (writable)
             {
-                var next = LibraryStore.Copy(data);
-                if (snapshot.Merge(next))
+                var previous = LibraryStore.Copy(data);
+                try
                 {
-                    store.Save(next);
-                    data = next;
-                    launcher?.RefreshData();
+                    if (snapshot.Merge(data))
+                        store.Save(data);
                 }
+                catch
+                {
+                    data = previous;
+                    throw;
+                }
+                launcher?.RefreshData();
                 scanNotice = snapshot.Warning.Length > 0 ? snapshot.Warning :
                     showResult ? "应用扫描完成" : "";
             }
@@ -191,7 +196,7 @@ public partial class App : Application
         finally
         {
             scanning = false;
-            launcher?.RefreshStatus();
+            launcher?.RefreshData();
             if (showResult && launcher is not { IsVisible: true } && scanNotice.Length > 0)
                 tray?.ShowBalloonTip(3500, "AppKeeper", scanNotice, Forms.ToolTipIcon.Info);
         }

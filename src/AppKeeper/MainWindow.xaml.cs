@@ -149,7 +149,7 @@ public partial class MainWindow : Window
             Tag = entry
         };
         AutomationProperties.SetName(tile, entry.Missing ? $"{entry.Name}，不可用" : entry.Name);
-        stack.Children.Add(Icon(entry));
+        stack.Children.Add(CreateTileIcon(entry));
         stack.Children.Add(new TextBlock
         {
             Text = entry.Name, FontSize = 13, MaxWidth = 103, Margin = new Thickness(0, 7, 0, 0),
@@ -210,7 +210,7 @@ public partial class MainWindow : Window
         return tile;
     }
 
-    private FrameworkElement Icon(Entry entry)
+    private FrameworkElement CreateTileIcon(Entry entry)
     {
         var frame = new Border
         {
