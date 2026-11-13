@@ -1,0 +1,125 @@
+<Window x:Class="AppKeeper.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AppKeeper" Icon="Assets/AppKeeper.ico" WindowStyle="None" ResizeMode="NoResize"
+        ShowInTaskbar="False" Topmost="True" Width="1050" Height="700"
+        FontFamily="Segoe UI, Microsoft YaHei UI" Foreground="White" UseLayoutRounding="True"
+        PreviewKeyDown="HandleKey" PreviewMouseLeftButtonDown="DismissOnBlank"
+        AllowDrop="True" DragOver="WindowDragOver" Drop="WindowDrop">
+    <Window.Resources>
+        <Style x:Key="TileButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="3,5"/>
+            <Setter Property="Margin" Value="4,2"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+    <Grid x:Name="Root" ClipToBounds="True">
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#182D45" Offset="0"/>
+                <GradientStop Color="#242C42" Offset=".48"/>
+                <GradientStop Color="#241B37" Offset="1"/>
+            </LinearGradientBrush>
+        </Grid.Background>
+        <Rectangle IsHitTestVisible="False">
+            <Rectangle.Fill>
+                <RadialGradientBrush Center=".15,.24" GradientOrigin=".15,.24" RadiusX=".75" RadiusY=".78">
+                    <GradientStop Color="#3C398AA3" Offset="0"/>
+                    <GradientStop Color="#00398AA3" Offset="1"/>
+                </RadialGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+        <Rectangle IsHitTestVisible="False">
+            <Rectangle.Fill>
+                <RadialGradientBrush Center=".95,.9" GradientOrigin=".95,.9" RadiusX=".7" RadiusY=".73">
+                    <GradientStop Color="#417D477E" Offset="0"/>
+                    <GradientStop Color="#007D477E" Offset="1"/>
+                </RadialGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+        <Grid x:Name="Workspace" Margin="48,32,48,18" MaxWidth="1500">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="1.6*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="Assets/AppKeeper.ico" Width="26" Height="26" Margin="0,0,9,0"/>
+                    <TextBlock Text="AppKeeper" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </StackPanel>
+                <Grid Grid.Column="1" MaxWidth="385">
+                    <TextBox x:Name="SearchBox" Padding="38,8,12,8" Height="40" Background="#26394E65"
+                             AutomationProperties.Name="搜索应用" TextChanged="SearchChanged"/>
+                    <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" Margin="14,0,0,0"
+                               VerticalAlignment="Center" Foreground="{StaticResource Secondary}" IsHitTestVisible="False"/>
+                    <TextBlock x:Name="SearchHint" Text="搜索应用、拼音或首字母" Margin="38,0,0,0"
+                               FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource Secondary}" IsHitTestVisible="False"/>
+                </Grid>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="AddButton" Content="＋ 添加" Click="OpenAdd" Margin="0,0,8,0"/>
+                    <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" ToolTip="设置"
+                            AutomationProperties.Name="设置" Click="OpenSettings"/>
+                </StackPanel>
+            </Grid>
+            <Grid Grid.Row="1" Margin="0,25,0,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="HomeButton" Content="应用" Click="OpenHome" Margin="0,0,8,0"/>
+                    <Button x:Name="InboxButton" Content="待整理" Click="OpenInbox"/>
+                </StackPanel>
+            </Grid>
+            <Grid x:Name="TileArea" Grid.Row="2" Margin="3,8" SizeChanged="ResizeTiles" MouseWheel="WheelPage">
+                <UniformGrid x:Name="Tiles" VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                    <TextBlock x:Name="EmptyTitle" HorizontalAlignment="Center" FontSize="22" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="EmptyDetail" Margin="0,8,0,0" HorizontalAlignment="Center" Foreground="{StaticResource Secondary}"/>
+                </StackPanel>
+            </Grid>
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button x:Name="PreviousButton" Content="&#xE76B;" FontFamily="Segoe MDL2 Assets" Padding="10,7"
+                        AutomationProperties.Name="上一页" Click="PreviousPage"/>
+                <TextBlock x:Name="PageLabel" VerticalAlignment="Center" Margin="13,0" Foreground="{StaticResource Secondary}"/>
+                <Button x:Name="NextButton" Content="&#xE76C;" FontFamily="Segoe MDL2 Assets" Padding="10,7"
+                        AutomationProperties.Name="下一页" Click="NextPage"/>
+            </StackPanel>
+            <Grid Grid.Row="4" Margin="0,12,0,0">
+                <TextBlock x:Name="StatusText" Foreground="{StaticResource Secondary}" TextTrimming="CharacterEllipsis" Margin="0,0,90,0"/>
+                <Button Content="Esc 隐藏" Click="HideClicked" HorizontalAlignment="Right" Padding="8,3"
+                        BorderThickness="0" Background="Transparent" Foreground="{StaticResource Secondary}"/>
+            </Grid>
+        </Grid>
+        <Grid x:Name="FolderShade" Visibility="Collapsed" Background="#680A101D">
+            <Border x:Name="FolderPanel" Background="#EB25354C" BorderBrush="#65AEC1D7" BorderThickness="1"
+                    CornerRadius="25" HorizontalAlignment="Center" VerticalAlignment="Center" Width="655" Padding="24">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="38" ShadowDepth="10" Opacity=".35"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="FolderTitle" FontSize="23" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,1,155,8"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button Content="拖出至应用" x:Name="FolderOut" AllowDrop="True" DragOver="OutDragOver" Drop="OutDrop"
+                                Padding="10,6" Margin="0,0,7,0"/>
+                        <Button Content="×" Click="CloseFolder" ToolTip="关闭文件夹" AutomationProperties.Name="关闭文件夹" Padding="10,6"/>
+                    </StackPanel>
+                    <ScrollViewer x:Name="FolderScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="380">
+                        <UniformGrid x:Name="FolderTiles" Columns="5" VerticalAlignment="Top"/>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
