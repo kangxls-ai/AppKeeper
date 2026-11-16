@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private readonly ShellIcons icons = new();
     private readonly DispatcherTimer edgeTimer = new() { Interval = TimeSpan.FromMilliseconds(550) };
     private readonly DispatcherTimer tagScrollTimer = new() { Interval = TimeSpan.FromMilliseconds(70) };
+    private readonly DispatcherTimer searchHistoryTimer = new() { Interval = TimeSpan.FromMilliseconds(850) };
     private readonly SolidColorBrush activeBrush = new(Color.FromArgb(95, 123, 190, 239));
     private IntPtr handle;
     private int page;
@@ -58,6 +59,7 @@ public partial class MainWindow : Window
             HwndSource.FromHwnd(handle).AddHook(WindowMessage);
         };
         edgeTimer.Tick += (_, _) => ChangePage(edgeDirection);
+        searchHistoryTimer.Tick += (_, _) => SaveQuickHistory();
         tagScrollTimer.Tick += (_, _) =>
             TagScroller.ScrollToHorizontalOffset(TagScroller.HorizontalOffset + 14 * tagScrollDirection);
         TagScroller.PreviewDragOver += ScrollTagsDuringDrag;
@@ -130,6 +132,7 @@ public partial class MainWindow : Window
 
     internal void CloseForExit()
     {
+        SaveQuickHistory();
         closingForExit = true;
         Close();
     }
@@ -144,6 +147,7 @@ public partial class MainWindow : Window
 
     internal void Conceal()
     {
+        SaveQuickHistory();
         CloseFolder();
         Hide();
         SearchBox.Clear();
@@ -169,6 +173,8 @@ public partial class MainWindow : Window
             selectedTag = null;
         if (IsVisible && !dragging)
         {
+            RenderSearchHistory();
+            RenderRecentEntries();
             RenderTags();
             RenderTiles();
             RenderFolder();
@@ -303,6 +309,7 @@ public partial class MainWindow : Window
     {
         var menu = new ContextMenu();
         AddItem(menu, entry.Kind == EntryKind.Group ? "打开文件夹" : "打开", () => ActivateEntry(entry));
+        AddPinAction(menu, entry);
         AddItem(menu, "重命名", () =>
         {
             if (Dialogs.Text(this, "重命名", "显示名称", entry.Name) is { } name)
@@ -376,6 +383,7 @@ public partial class MainWindow : Window
     {
         if (entry.Kind == EntryKind.Group)
         {
+            SaveQuickHistory(entry.Id);
             openFolder = entry.Id;
             RenderFolder();
             return;
@@ -383,6 +391,7 @@ public partial class MainWindow : Window
         try
         {
             WindowsCatalog.Launch(entry);
+            SaveQuickHistory(entry.Id);
             Conceal();
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or COMException or IOException)
@@ -521,6 +530,7 @@ public partial class MainWindow : Window
         if (!group.HasValue)
         {
             inbox = false;
+            SaveQuickHistory();
             SearchBox.Clear();
         }
         if (!app.Commit(library => Layout.AddEntries(library, entries, group, tag)))
@@ -581,6 +591,9 @@ public partial class MainWindow : Window
     {
         if (!ready)
             return;
+        searchHistoryTimer.Stop();
+        if (Query.Length > 0 && IsVisible)
+            searchHistoryTimer.Start();
         CloseFolder();
         page = 0;
         RefreshData();
@@ -588,6 +601,7 @@ public partial class MainWindow : Window
 
     private void SwitchSection(bool targetInbox)
     {
+        SaveQuickHistory();
         inbox = targetInbox;
         SearchBox.Clear();
         page = 0;
@@ -607,9 +621,13 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Escape)
             Conceal();
-        else if (e.Key == Key.Enter && SearchBox.IsKeyboardFocusWithin && Tiles.Children.Count > 0 &&
-            Tiles.Children[0] is Button { Tag: Entry entry } && Query.Length > 0)
-            ActivateEntry(entry);
+        else if (e.Key == Key.Enter && SearchBox.IsKeyboardFocusWithin && Query.Length > 0)
+        {
+            if (Tiles.Children.Count > 0 && Tiles.Children[0] is Button { Tag: Entry entry })
+                ActivateEntry(entry);
+            else
+                SaveQuickHistory();
+        }
         else if (!openFolder.HasValue && (e.Key is Key.PageUp or Key.PageDown ||
             (!SearchBox.IsKeyboardFocusWithin && e.Key is Key.Left or Key.Right)))
             ChangePage(e.Key is Key.PageUp or Key.Left ? -1 : 1);
@@ -839,6 +857,8 @@ public partial class MainWindow : Window
 
     private void ShowModule(FrameworkElement? view, Button selected)
     {
+        if (view != null)
+            SaveQuickHistory();
         CloseFolder();
         AppsPage.Visibility = view == null ? Visibility.Visible : Visibility.Collapsed;
         AllowDrop = view == null;

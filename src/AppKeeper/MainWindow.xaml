@@ -50,6 +50,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -63,31 +64,46 @@
                                 ToolTip="设置" AutomationProperties.Name="设置" Click="OpenSettings"/>
                     </StackPanel>
                 </Grid>
-                <Border Grid.Row="1" Margin="0,7,0,0" CornerRadius="10" BorderBrush="#64B0CADF" BorderThickness="1" Background="#BC263A50">
-                    <DockPanel MinHeight="49" Margin="10,0">
-                        <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="Segoe MDL2 Assets" Margin="0,0,9,0"
+                <Grid Grid.Row="1" Margin="0,7,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="132"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="SearchFrame" CornerRadius="10" BorderBrush="#64B0CADF" BorderThickness="1" Background="#BC263A50">
+                    <DockPanel MinHeight="44" Margin="7,0">
+                        <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="Segoe MDL2 Assets" Margin="0,0,5,0"
                                    VerticalAlignment="Center" Foreground="{StaticResource Secondary}"/>
                         <Grid>
                             <TextBox x:Name="SearchBox" Style="{x:Null}" BorderThickness="0" Padding="0" FontSize="17"
                                      Background="Transparent" Foreground="White" CaretBrush="White" VerticalContentAlignment="Center"
-                                     AutomationProperties.Name="搜索应用" TextChanged="SearchChanged"/>
+                                     AutomationProperties.Name="搜索应用" MaxLength="256" TextChanged="SearchChanged"/>
                             <TextBlock x:Name="SearchHint" Text="搜索应用或拼音" FontSize="14" TextTrimming="CharacterEllipsis"
                                        VerticalAlignment="Center" Foreground="{StaticResource Secondary}" IsHitTestVisible="False"/>
                         </Grid>
                     </DockPanel>
-                </Border>
-                <DockPanel Grid.Row="2" Margin="0,8,0,0" LastChildFill="True">
+                    </Border>
+                    <ScrollViewer Grid.Column="1" Margin="7,0,0,0" VerticalAlignment="Center"
+                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                  AutomationProperties.Name="最近检索">
+                        <StackPanel x:Name="SearchHistoryBar" Orientation="Horizontal"/>
+                    </ScrollViewer>
+                </Grid>
+                <ScrollViewer Grid.Row="2" Margin="0,6,0,0" HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled" AutomationProperties.Name="最近访问">
+                    <StackPanel x:Name="RecentEntriesBar" Orientation="Horizontal"/>
+                </ScrollViewer>
+                <DockPanel Grid.Row="3" Margin="0,8,0,0" LastChildFill="True">
                     <Button Content="＋ 标签" Click="CreateTag" DockPanel.Dock="Right" Padding="8,4"
                             VerticalAlignment="Top" Margin="7,0,0,0"/>
                     <ScrollViewer x:Name="TagScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="TagBar" Orientation="Horizontal" MinHeight="28"/>
                     </ScrollViewer>
                 </DockPanel>
-                <StackPanel Grid.Row="3" Margin="0,10,0,0" Orientation="Horizontal">
+                <StackPanel Grid.Row="4" Margin="0,8,0,0" Orientation="Horizontal">
                     <Button x:Name="HomeButton" Content="应用" Click="OpenHome" Margin="0,0,6,0" Padding="11,5"/>
                     <Button x:Name="InboxButton" Content="待整理" Click="OpenInbox" Padding="11,5"/>
                 </StackPanel>
-                <Grid x:Name="TileArea" Grid.Row="4" Margin="0,6" Background="Transparent"
+                <Grid x:Name="TileArea" Grid.Row="5" Margin="0,6" Background="Transparent"
                       MouseLeftButtonDown="HideOnBlank"
                       SizeChanged="ResizeTiles" MouseWheel="WheelPage">
                     <UniformGrid x:Name="Tiles" VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
@@ -97,14 +113,14 @@
                                    Foreground="{StaticResource Secondary}"/>
                     </StackPanel>
                 </Grid>
-                <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Center">
+                <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Center">
                     <Button x:Name="PreviousButton" Content="&#xE76B;" FontFamily="Segoe MDL2 Assets" Padding="9,5"
                             AutomationProperties.Name="上一页" Click="PreviousPage"/>
                     <TextBlock x:Name="PageLabel" VerticalAlignment="Center" Margin="11,0" Foreground="{StaticResource Secondary}"/>
                     <Button x:Name="NextButton" Content="&#xE76C;" FontFamily="Segoe MDL2 Assets" Padding="9,5"
                             AutomationProperties.Name="下一页" Click="NextPage"/>
                 </StackPanel>
-                <TextBlock Grid.Row="6" x:Name="StatusText" Foreground="{StaticResource Secondary}"
+                <TextBlock Grid.Row="7" x:Name="StatusText" Foreground="{StaticResource Secondary}"
                            TextTrimming="CharacterEllipsis" Margin="0,7,10,0" FontSize="11"/>
             </Grid>
             <Grid x:Name="FolderShade" Visibility="Collapsed" Background="#630B1320" MouseLeftButtonDown="DismissFolder">

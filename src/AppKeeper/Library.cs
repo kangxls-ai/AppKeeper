@@ -33,6 +33,9 @@ internal sealed class Library
     public int Key { get; set; } = 32;
     public List<string> Tags { get; set; } = [];
     public BallPosition? Ball { get; set; }
+    public List<string> SearchHistory { get; set; } = [];
+    public List<Guid> RecentEntries { get; set; } = [];
+    public List<Guid> PinnedEntries { get; set; } = [];
 }
 
 internal sealed record BallPosition(int X, int Y, string Monitor, DockEdge Edge);
@@ -142,6 +145,11 @@ internal sealed class LibraryStore(string directory)
         }
 
         data.Ignored = new HashSet<string>(data.Ignored, StringComparer.OrdinalIgnoreCase);
+        data.SearchHistory = (data.SearchHistory ?? []).Where(query => !string.IsNullOrWhiteSpace(query))
+            .Select(query => query.Trim()).Where(query => query.Length <= QuickHistory.QueryLimit)
+            .Distinct(StringComparer.OrdinalIgnoreCase).Take(QuickHistory.SearchLimit).ToList();
+        data.RecentEntries = (data.RecentEntries ?? []).Where(ids.Contains).Distinct().Take(QuickHistory.EntryLimit).ToList();
+        data.PinnedEntries = (data.PinnedEntries ?? []).Where(ids.Contains).Distinct().Take(QuickHistory.EntryLimit).ToList();
         return data;
     }
 

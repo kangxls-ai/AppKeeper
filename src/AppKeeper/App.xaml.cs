@@ -183,11 +183,12 @@ public partial class App : Application
             ShowLauncher();
     }
 
-    internal bool Commit(Action<Library> edit)
+    internal bool Commit(Action<Library> edit, bool quiet = false)
     {
         if (!writable)
         {
-            Error(notice);
+            if (!quiet)
+                Error(notice);
             return false;
         }
         var previous = LibraryStore.Copy(data);
@@ -200,11 +201,17 @@ public partial class App : Application
         {
             data = previous;
             notice = "保存失败。请检查程序目录权限和可用空间。";
-            launcher?.RefreshData();
-            Error(notice);
+            if (!quiet)
+            {
+                launcher?.RefreshData();
+                Error(notice);
+            }
+            else if (launcher is { } window)
+                _ = Dispatcher.BeginInvoke(window.RefreshData);
             return false;
         }
-        launcher?.RefreshData();
+        if (!quiet)
+            launcher?.RefreshData();
         return true;
     }
 

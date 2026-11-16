@@ -90,8 +90,9 @@ internal static class SelfTest
             catch (InvalidDataException) { }
             CheckSearchViewport();
             CheckTagOrganization(directory);
+            CheckQuickHistory(directory);
             System.Threading.Tasks.Task.Run(() => ModuleSelfTest.Run(directory)).GetAwaiter().GetResult();
-            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · ordered tags, tagged imports · encrypted pairing, offline delivery, ZIP, resume, MarkDo");
+            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · ordered tags, tagged imports, search and visit history · encrypted pairing, offline delivery, ZIP, resume, MarkDo");
             return 0;
         }
         catch (Exception error)
@@ -107,6 +108,45 @@ internal static class SelfTest
         var file = Environment.GetEnvironmentVariable("APPKEEPER_SELFTEST_LOG");
         if (!string.IsNullOrEmpty(file))
             File.WriteAllText(file, result);
+    }
+
+    private static void CheckQuickHistory(string directory)
+    {
+        var data = new Library();
+        var pinned = WindowsCatalog.FromUrl("https://example.com/pinned");
+        data.Entries.Add(pinned);
+        data.PinnedEntries.Add(pinned.Id);
+        QuickHistory.RecordVisit(data, pinned.Id);
+        for (var i = 0; i < 24; i++)
+        {
+            QuickHistory.RecordSearch(data, $"test {i}");
+            var entry = WindowsCatalog.FromUrl($"https://example.com/{i}");
+            data.Entries.Add(entry);
+            QuickHistory.RecordVisit(data, entry.Id);
+        }
+        QuickHistory.RecordSearch(data, " TEST 22 ");
+        QuickHistory.RecordSearch(data, "  ");
+        Check(data.SearchHistory.Count == 10 && data.SearchHistory[0] == "TEST 22" &&
+            data.SearchHistory.Count(query => query.Equals("test 22", StringComparison.OrdinalIgnoreCase)) == 1,
+            "search history recency, limit and deduplication");
+        Check(data.RecentEntries.Count == 20 && !data.RecentEntries.Contains(pinned.Id) &&
+            QuickHistory.Entries(data).First() == pinned && QuickHistory.Entries(data).Count() == 20,
+            "pinned entry stays visible as visits expire");
+        QuickHistory.RecordVisit(data, data.Entries[10].Id);
+        Check(QuickHistory.Entries(data).ElementAt(1).Id == data.Entries[10].Id, "revisit moves recent entry forward");
+        var folder = Directory.CreateDirectory(Path.Combine(directory, "history")).FullName;
+        var store = new LibraryStore(folder);
+        store.Save(data);
+        var restored = store.Load(out _);
+        Check(restored.SearchHistory.SequenceEqual(data.SearchHistory) &&
+            restored.RecentEntries.SequenceEqual(data.RecentEntries) && restored.PinnedEntries.SequenceEqual(data.PinnedEntries),
+            "history and fixed entries round trip");
+        Layout.Remove(restored, restored.Entries[0]);
+        Check(restored.PinnedEntries.Count == 0 && QuickHistory.Entries(restored).Count() == 20, "remove stale pin");
+        File.WriteAllText(store.DataPath, """{"Version":1}""");
+        restored = store.Load(out _);
+        Check(restored.SearchHistory.Count == 0 && restored.RecentEntries.Count == 0 &&
+            restored.PinnedEntries.Count == 0, "old data loads with empty histories");
     }
 
     private static void CheckTagOrganization(string directory)
@@ -164,6 +204,9 @@ internal static class SelfTest
                 var editor = launcher.SearchBox.Template.FindName("PART_ContentHost", launcher.SearchBox)
                     as System.Windows.Controls.ScrollViewer;
                 Check(editor is { ActualHeight: >= 24, ActualWidth: >= 94 }, "search text viewport at width " + width);
+                if (width == 820)
+                    Check(Math.Abs(launcher.SearchFrame.ActualWidth * 3 - launcher.Workspace.ActualWidth) < 5,
+                        "search uses one third of the row at standard width");
             }
         }
         finally { launcher.CloseForExit(); }

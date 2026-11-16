@@ -135,5 +135,7 @@ internal static class Layout
             library.Ignored.Add("target:" + entry.Target);
         }
         library.Entries.Remove(entry);
+        library.RecentEntries.Remove(entry.Id);
+        library.PinnedEntries.Remove(entry.Id);
     }
 }
