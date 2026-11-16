@@ -21,14 +21,17 @@ namespace AppKeeper;
 public partial class MainWindow : Window
 {
     private const string DragFormat = "AppKeeper.EntryId";
+    private const string TagDragFormat = "AppKeeper.Tag";
     private readonly App app;
     private readonly ShellIcons icons = new();
     private readonly DispatcherTimer edgeTimer = new() { Interval = TimeSpan.FromMilliseconds(550) };
+    private readonly DispatcherTimer tagScrollTimer = new() { Interval = TimeSpan.FromMilliseconds(70) };
     private readonly SolidColorBrush activeBrush = new(Color.FromArgb(95, 123, 190, 239));
     private IntPtr handle;
     private int page;
     private int pages = 1;
     private int edgeDirection;
+    private int tagScrollDirection;
     private bool inbox;
     private bool dragging;
     private bool ready;
@@ -36,10 +39,12 @@ public partial class MainWindow : Window
     private bool closingForExit;
     private Guid? openFolder;
     private string? selectedTag;
+    private string? draggedTag;
     private PigeonPage? pigeonPage;
     private AgendaPage? agendaPage;
     private bool firstReveal = true;
     private string Query => SearchBox.Text.Trim();
+    private bool CanArrangeEntries => selectedTag == null && Query.Length == 0;
 
     internal MainWindow(App app)
     {
@@ -53,6 +58,10 @@ public partial class MainWindow : Window
             HwndSource.FromHwnd(handle).AddHook(WindowMessage);
         };
         edgeTimer.Tick += (_, _) => ChangePage(edgeDirection);
+        tagScrollTimer.Tick += (_, _) =>
+            TagScroller.ScrollToHorizontalOffset(TagScroller.HorizontalOffset + 14 * tagScrollDirection);
+        TagScroller.PreviewDragOver += ScrollTagsDuringDrag;
+        TagScroller.DragLeave += (_, _) => tagScrollTimer.Stop();
     }
 
     private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -186,7 +195,7 @@ public partial class MainWindow : Window
             Tiles.Children.Add(Tile(entry, false));
         EmptyState.Visibility = matches.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         EmptyTitle.Text = Query.Length > 0 || selectedTag != null ? "没有匹配的应用" : inbox ? "待整理区为空" : "还没有已整理的应用";
-        EmptyDetail.Text = selectedTag != null ? "可在应用的右键菜单中设置标签" :
+        EmptyDetail.Text = selectedTag != null ? "拖入文件或用「添加」，也可将已有入口拖到标签上" :
             Query.Length > 0 ? "试试应用名称、全拼或首字母" :
             inbox ? "新发现的应用会出现在这里" : "从「待整理」移动应用，或使用「添加」创建入口";
         PageLabel.Text = $"{page + 1} / {pages}";
@@ -216,34 +225,10 @@ public partial class MainWindow : Window
         tile.Click += (_, _) => ActivateEntry(entry);
         tile.ContextMenu = MenuFor(entry);
 
-        if (Query.Length == 0 && selectedTag == null)
+        EnableButtonDrag(tile, () => new DataObject(DragFormat, entry.Id.ToString()),
+            DragDropEffects.Move | DragDropEffects.Link);
+        if (CanArrangeEntries)
         {
-            Point? origin = null;
-            tile.PreviewMouseLeftButtonDown += (_, e) => origin = e.GetPosition(tile);
-            tile.PreviewMouseLeftButtonUp += (_, _) => origin = null;
-            tile.PreviewMouseMove += (_, e) =>
-            {
-                if (origin is not { } start || e.LeftButton != MouseButtonState.Pressed || dragging)
-                    return;
-                var now = e.GetPosition(tile);
-                if (Math.Abs(now.X - start.X) < SystemParameters.MinimumHorizontalDragDistance &&
-                    Math.Abs(now.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance)
-                    return;
-                origin = null;
-                tile.ReleaseMouseCapture();
-                dragging = true;
-                try { DragDrop.DoDragDrop(tile, new DataObject(DragFormat, entry.Id.ToString()), DragDropEffects.Move); }
-                finally
-                {
-                    dragging = false;
-                    edgeTimer.Stop();
-                    if (draggingOut)
-                        CloseFolder();
-                    draggingOut = false;
-                    RefreshData();
-                }
-                e.Handled = true;
-            };
             tile.AllowDrop = true;
             tile.DragOver += (_, e) =>
             {
@@ -326,27 +311,24 @@ public partial class MainWindow : Window
         AddItem(menu, "更换图标…", () => ChangeIcon(entry));
         if (entry.Icon != null)
             AddItem(menu, "恢复默认图标", () => app.Commit(_ => entry.Icon = null));
-        if (entry.Kind != EntryKind.Group)
+        var tags = new MenuItem { Header = "标签" };
+        foreach (var tag in app.Data.Tags)
         {
-            var tags = new MenuItem { Header = "标签" };
-            foreach (var tag in app.Data.Tags)
+            var item = new MenuItem { Header = new TextBlock { Text = tag }, IsCheckable = true,
+                IsChecked = entry.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase) };
+            item.Click += (_, _) => app.Commit(library =>
             {
-                var item = new MenuItem { Header = new TextBlock { Text = tag }, IsCheckable = true,
-                    IsChecked = entry.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase) };
-                item.Click += (_, _) => app.Commit(_ =>
-                {
-                    if (item.IsChecked)
-                        entry.Tags.Add(tag);
-                    else
-                        entry.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
-                });
-                tags.Items.Add(item);
-            }
-            if (tags.Items.Count > 0)
-                tags.Items.Add(new Separator());
-            AddItem(tags, "新建并添加…", () => AddTag(entry));
-            menu.Items.Add(tags);
+                if (item.IsChecked)
+                    Layout.AssignTag(library, entry, tag);
+                else
+                    entry.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
+            });
+            tags.Items.Add(item);
         }
+        if (tags.Items.Count > 0)
+            tags.Items.Add(new Separator());
+        AddItem(tags, "新建并添加…", () => AddTag(entry));
+        menu.Items.Add(tags);
         if (entry.Group.HasValue || entry.Inbox)
             AddItem(menu, "移到应用页", () => app.Commit(library => Layout.MoveHome(library, entry)));
 
@@ -454,7 +436,8 @@ public partial class MainWindow : Window
 
         draggingOut = true;
         openFolder = null;
-        inbox = false;
+        if (CanArrangeEntries)
+            inbox = false;
         FolderShade.Visibility = Visibility.Collapsed;
         RenderTiles();
         RefreshStatus();
@@ -464,7 +447,7 @@ public partial class MainWindow : Window
     {
         if (!AppsPage.IsVisible)
             return;
-        if (Dragged(e) is { } source && !openFolder.HasValue)
+        if (CanArrangeEntries && Dragged(e) is { } source && !openFolder.HasValue)
         {
             var x = e.GetPosition(this).X;
             var direction = x < 15 ? -1 : x > ActualWidth - 15 ? 1 : 0;
@@ -493,7 +476,7 @@ public partial class MainWindow : Window
     {
         if (!AppsPage.IsVisible)
             return;
-        if (Dragged(e) is { } entry && !openFolder.HasValue && (!inbox || entry.Kind != EntryKind.Group))
+        if (CanArrangeEntries && Dragged(e) is { } entry && !openFolder.HasValue && (!inbox || entry.Kind != EntryKind.Group))
         {
             app.Commit(library =>
             {
@@ -522,42 +505,28 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void AddPaths(IEnumerable<string> paths)
+    private void AddPaths(IEnumerable<string> paths, string? targetTag = null)
     {
-        try { AddEntries(paths.Select(WindowsCatalog.FromPath).ToList()); }
+        try { AddEntries(paths.Select(WindowsCatalog.FromPath).ToList(), targetTag); }
         catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException)
         {
             app.Error(e.Message);
         }
     }
 
-    private void AddEntries(List<Entry> entries)
+    private void AddEntries(List<Entry> entries, string? targetTag = null)
     {
-        var group = openFolder;
+        var group = targetTag == null ? openFolder : null;
+        var tag = targetTag ?? selectedTag;
         if (!group.HasValue)
         {
             inbox = false;
             SearchBox.Clear();
         }
-        app.Commit(library =>
-        {
-            foreach (var entry in entries)
-            {
-                var existing = library.Entries.Find(item => item.Kind == entry.Kind &&
-                    string.Equals(item.Target, entry.Target, StringComparison.OrdinalIgnoreCase));
-                if (existing != null)
-                {
-                    if (existing.Inbox || group.HasValue)
-                    {
-                        existing.Group = group;
-                        existing.Inbox = false;
-                    }
-                    continue;
-                }
-                entry.Group = group;
-                library.Entries.Add(entry);
-            }
-        });
+        if (!app.Commit(library => Layout.AddEntries(library, entries, group, tag)))
+            return;
+        if (targetTag != null)
+            SelectTag(targetTag);
         if (!group.HasValue)
         {
             page = pages - 1;
@@ -649,6 +618,112 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void EnableButtonDrag(Button button, Func<DataObject> payload, DragDropEffects effects)
+    {
+        Point? origin = null;
+        button.PreviewMouseLeftButtonDown += (_, e) => origin = e.GetPosition(button);
+        button.PreviewMouseLeftButtonUp += (_, _) => origin = null;
+        button.PreviewMouseMove += (_, e) =>
+        {
+            if (origin is not { } start || dragging || e.LeftButton != MouseButtonState.Pressed)
+                return;
+            var delta = e.GetPosition(button) - start;
+            if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            origin = null;
+            e.Handled = true;
+            button.ReleaseMouseCapture();
+            dragging = true;
+            try { DragDrop.DoDragDrop(button, payload(), effects); }
+            finally
+            {
+                dragging = false;
+                draggedTag = null;
+                tagScrollTimer.Stop();
+                edgeTimer.Stop();
+                if (draggingOut)
+                    CloseFolder();
+                draggingOut = false;
+                RefreshData();
+            }
+        };
+    }
+
+    private void SelectTag(string? tag)
+    {
+        selectedTag = tag;
+        page = 0;
+        RefreshData();
+    }
+
+    private bool IsTagDrag(DragEventArgs e) =>
+        draggedTag != null && e.Data.GetDataPresent(TagDragFormat, false) &&
+        string.Equals(e.Data.GetData(TagDragFormat, false) as string, draggedTag, StringComparison.Ordinal);
+
+    private void ScrollTagsDuringDrag(object sender, DragEventArgs e)
+    {
+        var x = e.GetPosition(TagScroller).X;
+        tagScrollDirection = x < 16 && TagScroller.HorizontalOffset > 0 ? -1 :
+            x > TagScroller.ViewportWidth - 16 && TagScroller.HorizontalOffset < TagScroller.ScrollableWidth ? 1 : 0;
+        if (tagScrollDirection == 0)
+            tagScrollTimer.Stop();
+        else
+            tagScrollTimer.Start();
+    }
+
+    private void EnableTagDrop(Button button, string tag)
+    {
+        bool After(DragEventArgs e) => e.GetPosition(button).X >= button.ActualWidth / 2;
+        void Reset()
+        {
+            button.Background = tag == selectedTag ? activeBrush : Brushes.Transparent;
+            button.ClearValue(Control.BorderBrushProperty);
+            button.ClearValue(Control.BorderThicknessProperty);
+        }
+
+        button.AllowDrop = true;
+        button.DragOver += (_, e) =>
+        {
+            Reset();
+            edgeTimer.Stop();
+            if (IsTagDrag(e) && draggedTag != tag)
+            {
+                button.BorderBrush = Brushes.LightSkyBlue;
+                button.BorderThickness = After(e) ? new Thickness(1, 1, 3, 1) : new Thickness(3, 1, 1, 1);
+                e.Effects = DragDropEffects.Move;
+            }
+            else if (Dragged(e) != null || e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                button.Background = activeBrush;
+                e.Effects = Dragged(e) != null ? DragDropEffects.Link : DragDropEffects.Copy;
+            }
+            else
+                e.Effects = DragDropEffects.None;
+            e.Handled = true;
+        };
+        button.DragLeave += (_, _) => Reset();
+        button.Drop += (_, e) =>
+        {
+            e.Handled = true;
+            tagScrollTimer.Stop();
+            Reset();
+            if (IsTagDrag(e) && draggedTag != tag)
+            {
+                var after = After(e);
+                app.Commit(library => Layout.MoveTag(library, draggedTag!, tag, after));
+            }
+            else if (Dragged(e) is { } entry)
+            {
+                if (!entry.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
+                    app.Commit(library => Layout.AssignTag(library, entry, tag));
+            }
+            else if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
+                AddPaths(files, tag);
+        };
+    }
+
     private void RenderTags()
     {
         TagBar.Children.Clear();
@@ -657,14 +732,15 @@ public partial class MainWindow : Window
             var button = new Button { Content = tag ?? "全部", FontSize = 12,
                 Margin = new Thickness(0, 0, 5, 0), Padding = new Thickness(9, 4, 9, 4),
                 Background = tag == selectedTag ? activeBrush : Brushes.Transparent };
-            button.Click += (_, _) =>
-            {
-                selectedTag = tag;
-                page = 0;
-                RefreshData();
-            };
+            button.Click += (_, _) => SelectTag(tag);
             if (tag != null)
             {
+                EnableButtonDrag(button, () =>
+                {
+                    draggedTag = tag;
+                    return new DataObject(TagDragFormat, tag);
+                }, DragDropEffects.Move);
+                EnableTagDrop(button, tag);
                 var menu = new ContextMenu();
                 AddItem(menu, "删除标签", () =>
                 {
@@ -690,7 +766,8 @@ public partial class MainWindow : Window
         app.Commit(data =>
         {
             data.Tags.Add(tag);
-            entry?.Tags.Add(tag);
+            if (entry != null)
+                Layout.AssignTag(data, entry, tag);
         });
     }
 

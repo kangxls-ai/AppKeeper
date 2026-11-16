@@ -79,7 +79,7 @@
                 <DockPanel Grid.Row="2" Margin="0,8,0,0" LastChildFill="True">
                     <Button Content="＋ 标签" Click="CreateTag" DockPanel.Dock="Right" Padding="8,4"
                             VerticalAlignment="Top" Margin="7,0,0,0"/>
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <ScrollViewer x:Name="TagScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="TagBar" Orientation="Horizontal" MinHeight="28"/>
                     </ScrollViewer>
                 </DockPanel>

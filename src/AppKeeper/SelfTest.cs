@@ -89,8 +89,9 @@ internal static class SelfTest
             }
             catch (InvalidDataException) { }
             CheckSearchViewport();
+            CheckTagOrganization(directory);
             System.Threading.Tasks.Task.Run(() => ModuleSelfTest.Run(directory)).GetAwaiter().GetResult();
-            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · encrypted pairing, offline delivery, ZIP, resume, MarkDo");
+            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · ordered tags, tagged imports · encrypted pairing, offline delivery, ZIP, resume, MarkDo");
             return 0;
         }
         catch (Exception error)
@@ -106,6 +107,46 @@ internal static class SelfTest
         var file = Environment.GetEnvironmentVariable("APPKEEPER_SELFTEST_LOG");
         if (!string.IsNullOrEmpty(file))
             File.WriteAllText(file, result);
+    }
+
+    private static void CheckTagOrganization(string directory)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(directory, "tag-test")).FullName;
+        var file = Path.Combine(folder, "example.txt");
+        var shortcut = Path.Combine(folder, "example.url");
+        File.WriteAllText(file, "example");
+        File.WriteAllText(shortcut, "[InternetShortcut]\nURL=https://example.com\n");
+        var library = new Library { Tags = ["工作", "生活", "工具"] };
+        Check(Layout.MoveTag(library, "工作", "工具", after: true) &&
+            library.Tags.SequenceEqual(["生活", "工具", "工作"]), "move tag after another");
+        Check(Layout.MoveTag(library, "工作", "生活", after: false) &&
+            !Layout.MoveTag(library, "工作", "生活", after: false) &&
+            library.Tags.SequenceEqual(["工作", "生活", "工具"]), "move tag before and ignore a no-op");
+        Layout.MoveTag(library, "工具", "生活", after: false);
+
+        var directoryEntry = WindowsCatalog.FromPath(folder);
+        var fileEntry = WindowsCatalog.FromPath(file);
+        var appEntry = WindowsCatalog.FromPath(shortcut);
+        var webEntry = WindowsCatalog.FromUrl("https://example.com");
+        var group = new Entry { Kind = EntryKind.Group, Name = "分组" };
+        library.Entries.Add(group);
+        fileEntry.Group = group.Id;
+        library.Entries.Add(fileEntry);
+        Layout.AssignTag(library, fileEntry, "生活");
+        Layout.AddEntries(library, [directoryEntry, WindowsCatalog.FromPath(file), appEntry, webEntry], null, "工作");
+        Check(library.Entries.Count == 5 && fileEntry.Group == group.Id &&
+            fileEntry.Tags.SequenceEqual(["生活", "工作"]) &&
+            Layout.Visible(library, false, "", "工作").Count() == 4, "tagged files, folders, shortcuts and URLs");
+        Check(Layout.AssignTag(library, group, "工具") && !Layout.AssignTag(library, group, "工具"), "assign tag without duplicates");
+        var untagged = WindowsCatalog.FromUrl("https://example.org");
+        Layout.AddEntries(library, [untagged], null, null);
+        Check(untagged.Tags.Count == 0, "all view does not add a tag");
+        var store = new LibraryStore(folder);
+        store.Save(library);
+        var saved = store.Load(out _);
+        Check(saved.Tags.SequenceEqual(["工作", "工具", "生活"]) &&
+            saved.Entries.Single(entry => entry.Id == fileEntry.Id).Tags.SequenceEqual(["生活", "工作"]),
+            "tag order and membership survive reload");
     }
 
     private static void CheckSearchViewport()

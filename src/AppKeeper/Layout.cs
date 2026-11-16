@@ -20,6 +20,50 @@ internal static class Layout
     public static bool IsTagName(string? tag) =>
         tag is { Length: > 0 and <= 24 } && tag == tag.Trim() && !tag.Any(char.IsControl);
 
+    public static bool AssignTag(Library library, Entry entry, string? tag)
+    {
+        var canonical = library.Tags.Find(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
+        if (canonical == null || entry.Tags.Contains(canonical, StringComparer.OrdinalIgnoreCase))
+            return false;
+        entry.Tags.Add(canonical);
+        return true;
+    }
+
+    public static bool MoveTag(Library library, string source, string target, bool after)
+    {
+        var tags = library.Tags;
+        var from = tags.IndexOf(source);
+        var to = tags.IndexOf(target);
+        if (from < 0 || to < 0 || from == to)
+            return false;
+        var destination = to + (after ? 1 : 0) - (from < to ? 1 : 0);
+        if (destination == from)
+            return false;
+        tags.RemoveAt(from);
+        tags.Insert(destination, source);
+        return true;
+    }
+
+    public static void AddEntries(Library library, IEnumerable<Entry> entries, Guid? group, string? tag)
+    {
+        foreach (var entry in entries)
+        {
+            var existing = library.Entries.Find(item => item.Kind == entry.Kind &&
+                string.Equals(item.Target, entry.Target, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                entry.Group = group;
+                library.Entries.Add(entry);
+            }
+            else if (existing.Inbox || (group.HasValue && tag == null))
+            {
+                existing.Group = group;
+                existing.Inbox = false;
+            }
+            AssignTag(library, existing ?? entry, tag);
+        }
+    }
+
     public static void RemoveTag(Library library, string tag)
     {
         library.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
