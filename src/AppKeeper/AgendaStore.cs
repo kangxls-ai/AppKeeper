@@ -184,9 +184,9 @@ internal sealed class Sqlite : IDisposable
     private readonly IntPtr db;
     private Sqlite(IntPtr db) => this.db = db;
 
-    internal static Sqlite Open(string path, bool create = false)
+    internal static Sqlite Open(string path, bool create = false, bool readOnly = false)
     {
-        var result = sqlite3_open_v2(path, out var db, create ? 6 : 2, IntPtr.Zero);
+        var result = sqlite3_open_v2(path, out var db, readOnly ? 1 : create ? 6 : 2, IntPtr.Zero);
         var connection = new Sqlite(db);
         if (result != 0)
         {
@@ -195,6 +195,17 @@ internal sealed class Sqlite : IDisposable
         }
         sqlite3_busy_timeout(db, 3000);
         return connection;
+    }
+
+    internal void BackupTo(Sqlite destination)
+    {
+        var backup = sqlite3_backup_init(destination.db, "main", db, "main");
+        if (backup == IntPtr.Zero)
+            destination.Check(sqlite3_errcode(destination.db));
+        var result = sqlite3_backup_step(backup, -1);
+        var finish = sqlite3_backup_finish(backup);
+        destination.Check(result, 101);
+        destination.Check(finish);
     }
 
     private IntPtr Prepare(string sql, string[] args)
@@ -257,4 +268,10 @@ internal sealed class Sqlite : IDisposable
     [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr sqlite3_errmsg(IntPtr db);
     [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_finalize(IntPtr statement);
     [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_close(IntPtr db);
+    [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_errcode(IntPtr db);
+    [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr sqlite3_backup_init(IntPtr destination, [MarshalAs(UnmanagedType.LPUTF8Str)] string destinationName,
+        IntPtr source, [MarshalAs(UnmanagedType.LPUTF8Str)] string sourceName);
+    [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_backup_step(IntPtr backup, int pages);
+    [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_backup_finish(IntPtr backup);
 }

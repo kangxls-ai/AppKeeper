@@ -91,8 +91,9 @@ internal static class SelfTest
             CheckSearchViewport();
             CheckTagOrganization(directory);
             CheckQuickHistory(directory);
+            CheckPortableMigration(directory);
             System.Threading.Tasks.Task.Run(() => ModuleSelfTest.Run(directory)).GetAwaiter().GetResult();
-            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · ordered tags, tagged imports, search and visit history · encrypted pairing, offline delivery, ZIP, resume, MarkDo");
+            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · tags and history · Pigeon transfer, MarkDo and Store migration");
             return 0;
         }
         catch (Exception error)
@@ -108,6 +109,63 @@ internal static class SelfTest
         var file = Environment.GetEnvironmentVariable("APPKEEPER_SELFTEST_LOG");
         if (!string.IsNullOrEmpty(file))
             File.WriteAllText(file, result);
+    }
+
+    internal static int CheckStoreActivation(ProductProfile profile)
+    {
+        if (!profile.IsStore)
+            return 1;
+        var localState = Path.GetDirectoryName(profile.DataDirectory)!;
+        Directory.CreateDirectory(localState);
+        File.WriteAllText(Path.Combine(localState, "package-smoke.txt"), profile.Name + "\n" + profile.DataDirectory);
+        return 0;
+    }
+
+    private static void CheckPortableMigration(string directory)
+    {
+        var source = Directory.CreateDirectory(Path.Combine(directory, "绿色版")).FullName;
+        var portable = ProductProfile.Resolve(null, source, directory);
+        var packaged = ProductProfile.Resolve("kangxls.EasyAppKeeper_test", source, directory);
+        Check(!portable.IsStore && portable.DataDirectory == source && packaged.IsStore &&
+            packaged.DataDirectory.EndsWith(@"kangxls.EasyAppKeeper_test\LocalState\Data"), "separate portable and store environments");
+        File.Create(Path.Combine(source, "AppKeeper.exe")).Dispose();
+        var library = new Library { Tags = ["工作"], SearchHistory = ["jisuanqi"] };
+        var entry = WindowsCatalog.FromUrl("https://example.com");
+        Layout.AssignTag(library, entry, "工作");
+        library.Entries.Add(entry);
+        library.PinnedEntries.Add(entry.Id);
+        new LibraryStore(source).Save(library);
+        var original = new AgendaStore(source);
+        using var holdWal = Sqlite.Open(original.PathName);
+        _ = holdWal.Rows("PRAGMA journal_mode=WAL").ToArray();
+        original.Append("create", Guid.NewGuid().ToString(), new { title = "既有日程" });
+        var keyFile = Path.Combine(source, "AppKeeper.pigeon.pfx");
+        using var certificate = PigeonWire.Identity(keyFile);
+        var id = Guid.NewGuid();
+        var folder = Directory.CreateDirectory(Path.Combine(source, "pigeon-transfer")).FullName;
+        var archive = Path.Combine(folder, id.ToString("N") + ".zip");
+        File.WriteAllText(archive, "test transfer");
+        var share = Directory.CreateDirectory(Path.Combine(source, "share")).FullName;
+        var received = Path.Combine(share, "received.txt");
+        File.WriteAllText(received, "original received file");
+        ModuleFiles.Write(Path.Combine(source, "AppKeeper.pigeon.json"), new PigeonData
+        {
+            Items = [new(id, "test-peer", true, "file", "queued.zip", DateTimeOffset.Now, "queued", Path: archive),
+                new(Guid.NewGuid(), "test-peer", false, "file", "received.txt", DateTimeOffset.Now, "saved", Path: received)]
+        });
+
+        PortableMigration.Run(source, packaged.DataDirectory);
+        var migrated = new LibraryStore(packaged.DataDirectory).Load(out _);
+        Check(migrated.Tags.SequenceEqual(library.Tags) && migrated.PinnedEntries.SequenceEqual([entry.Id]) &&
+            migrated.SearchHistory.SequenceEqual(library.SearchHistory) && !migrated.StartWithWindows,
+            "migrate library and start with packaged startup disabled");
+        Check(new AgendaStore(packaged.DataDirectory).Tasks().Single().Title == "既有日程", "migrate SQLite WAL data");
+        using var copied = PigeonWire.Identity(Path.Combine(packaged.DataDirectory, "AppKeeper.pigeon.pfx"));
+        Check(PigeonWire.Fingerprint(copied) == PigeonWire.Fingerprint(certificate), "preserve pairing identity");
+        var pigeon = ModuleFiles.Read<PigeonData>(Path.Combine(packaged.DataDirectory, "AppKeeper.pigeon.json"));
+        Check(pigeon.Items[0].Path != archive && File.Exists(pigeon.Items[0].Path) && File.Exists(archive) &&
+            pigeon.Items[1].Path == received && File.Exists(received), "migrate pending archive and keep saved files");
+        Check(new LibraryStore(source).Load(out _).StartWithWindows, "retain original preferences");
     }
 
     private static void CheckQuickHistory(string directory)

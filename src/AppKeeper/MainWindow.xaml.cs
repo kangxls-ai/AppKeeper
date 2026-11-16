@@ -51,6 +51,7 @@ public partial class MainWindow : Window
     {
         this.app = app;
         InitializeComponent();
+        Title = ProductTitle.Text = app.ProductName;
         AppsTab.Background = activeBrush;
         ready = true;
         SourceInitialized += (_, _) =>

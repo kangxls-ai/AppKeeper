@@ -15,7 +15,8 @@ namespace AppKeeper;
 
 public partial class App : Application
 {
-    private readonly LibraryStore store = new(AppContext.BaseDirectory);
+    private readonly ProductProfile profile = ProductProfile.Current;
+    private readonly LibraryStore store = new(ProductProfile.Current.DataDirectory);
     private Mutex? instance;
     private EventWaitHandle? showEvent;
     private RegisteredWaitHandle? showWait;
@@ -40,8 +41,10 @@ public partial class App : Application
     private string hotkeyNotice = "";
 
     internal Library Data => data;
-    internal PigeonService Pigeon => pigeon ??= new PigeonService(AppContext.BaseDirectory);
-    internal AgendaStore Agenda => agenda ??= new AgendaStore(AppContext.BaseDirectory);
+    internal string ProductName => profile.Name;
+    internal bool IsStoreEdition => profile.IsStore;
+    internal PigeonService Pigeon => pigeon ??= new PigeonService(profile.DataDirectory);
+    internal AgendaStore Agenda => agenda ??= new AgendaStore(profile.DataDirectory);
     internal string Status => string.Join("　", new[] { notice, scanNotice, hotkeyNotice }.Where(text => text.Length > 0));
 
     protected override void OnStartup(StartupEventArgs e)
@@ -52,7 +55,14 @@ public partial class App : Application
             Shutdown(SelfTest.Run());
             return;
         }
+        if (e.Args.Contains("--store-self-test"))
+        {
+            Shutdown(SelfTest.CheckStoreActivation(profile));
+            return;
+        }
 
+        var background = e.Args.Contains("--background") || (profile.IsStore &&
+            string.Equals(Path.GetFileName(Environment.ProcessPath), "EasyAppKeeper.Startup.exe", StringComparison.OrdinalIgnoreCase));
         const string instanceName = @"Local\AppKeeper.V1";
         using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
         var name = instanceName + "." + identity.User?.Value;
@@ -60,7 +70,7 @@ public partial class App : Application
         instance = new Mutex(false, name, out var first);
         if (!first)
         {
-            if (!e.Args.Contains("--background"))
+            if (!background)
                 showEvent.Set();
             Shutdown();
             return;
@@ -68,7 +78,15 @@ public partial class App : Application
 
         try
         {
+            if (profile.IsStore && !Directory.Exists(profile.DataDirectory))
+            {
+                if (!background)
+                    Dialogs.OfferPortableMigration(profile);
+                Directory.CreateDirectory(profile.DataDirectory);
+            }
             data = store.Load(out var recovery);
+            if (profile.IsStore && !File.Exists(store.DataPath))
+                data.StartWithWindows = false;
             notice = recovery ?? "";
             if (recovery != null || !File.Exists(store.DataPath))
                 store.Save(data);
@@ -77,7 +95,8 @@ public partial class App : Application
         {
             writable = false;
             notice = error is InvalidDataException ? error.Message :
-                "程序目录无法写入。请将 AppKeeper 移到可写目录后重新运行。";
+                profile.IsStore ? "无法写入商店版用户数据目录。" :
+                    "程序目录无法写入。请将 AppKeeper 移到可写目录后重新运行。";
         }
 
         messages = new HwndSource(new HwndSourceParameters("AppKeeper Messages")
@@ -112,10 +131,10 @@ public partial class App : Application
                 _ = Dispatcher.BeginInvoke(ShowLauncher);
         }, null, Timeout.Infinite, false);
 
-        if (!e.Args.Contains("--background"))
+        if (!background)
             ShowLauncher();
         else if (Status.Length > 0 || moduleWarning.Length > 0)
-            tray!.ShowBalloonTip(5000, "AppKeeper", Status + " " + moduleWarning, Forms.ToolTipIcon.Warning);
+            tray!.ShowBalloonTip(5000, ProductName, Status + " " + moduleWarning, Forms.ToolTipIcon.Warning);
 
         if (writable)
             _ = Refresh();
@@ -127,18 +146,18 @@ public partial class App : Application
     private void CreateTray()
     {
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("显示 AppKeeper", null, (_, _) => ShowLauncher());
+        menu.Items.Add("显示 " + ProductName, null, (_, _) => ShowLauncher());
         menu.Items.Add("设置", null, (_, _) => GetLauncher().ShowSettingsFromTray());
         menu.Items.Add("重新扫描应用", null, async (_, _) => await Refresh(showResult: true));
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("退出 AppKeeper", null, (_, _) =>
+        menu.Items.Add("退出 " + ProductName, null, (_, _) =>
         {
             launcher?.CloseForExit();
             Shutdown();
         });
         using var stream = GetResourceStream(new Uri("Assets/AppKeeper.ico", UriKind.Relative)).Stream;
         trayIcon = new System.Drawing.Icon(stream);
-        tray = new Forms.NotifyIcon { Icon = trayIcon, Text = "AppKeeper", ContextMenuStrip = menu, Visible = true };
+        tray = new Forms.NotifyIcon { Icon = trayIcon, Text = ProductName, ContextMenuStrip = menu, Visible = true };
         tray.MouseClick += (_, args) =>
         {
             if (args.Button == Forms.MouseButtons.Left)
@@ -343,6 +362,8 @@ public partial class App : Application
 
     private void ApplyAutostart()
     {
+        if (profile.IsStore)
+            return;
         try
         {
             var path = Environment.ProcessPath!;

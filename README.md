@@ -38,6 +38,8 @@ AppKeeper 是 Windows 10/11 x64 的应用启动器。半透明窗口采用 Launc
 
 ## 构建
 
+Microsoft Store 版使用 EasyAppKeeper 名称。其 MSIX 构建、提交和从绿色版迁移的步骤见 [商店版说明](packaging/store/README.md)。
+
 需要 .NET 10 SDK。Windows Actions 在推送、拉取请求及手动运行时编译、自检并上传 x64 产物。也可在本地运行：
 
 ```powershell

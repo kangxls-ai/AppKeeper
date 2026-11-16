@@ -51,10 +51,13 @@ internal static class Dialogs
 
     public static void Settings(Window owner, App app)
     {
-        var (dialog, body) = Create(owner, "AppKeeper 设置", 490);
+        var (dialog, body) = Create(owner, app.ProductName + " 设置", 490);
         var startup = new CheckBox { Content = "登录 Windows 时在托盘启动", IsChecked = app.Data.StartWithWindows,
             Foreground = Brushes.White, Margin = new Thickness(0, 0, 0, 19) };
-        body.Children.Add(startup);
+        if (app.IsStoreEdition)
+            AddButton(body, "在 Windows 设置中管理登录自启", () => OpenLink(dialog, "ms-settings:startupapps"));
+        else
+            body.Children.Add(startup);
         body.Children.Add(new TextBlock { Text = "全局快捷键", FontWeight = FontWeights.SemiBold });
 
         var modifiers = app.Data.Modifiers;
@@ -106,6 +109,12 @@ internal static class Dialogs
                 app.Export(file.FileName);
         });
         body.Children.Add(tools);
+        if (app.IsStoreEdition)
+        {
+            body.Children.Add(new TextBlock { Text = "关于 EasyAppKeeper", FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 12, 0, 6) });
+            AddButton(body, "意见反馈（公开页面）", () => OpenLink(dialog, "https://github.com/kangxls-ai/AppKeeper/issues/new"));
+        }
 
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 20, 0, 0) };
@@ -119,6 +128,63 @@ internal static class Dialogs
         footer.Children.Add(save);
         body.Children.Add(footer);
         dialog.ShowDialog();
+    }
+
+    public static void OfferPortableMigration(ProductProfile profile)
+    {
+        var body = new StackPanel { Margin = new Thickness(24) };
+        var dialog = new Window
+        {
+            Title = "欢迎使用 " + profile.Name, Width = 485, SizeToContent = SizeToContent.Height,
+            ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Background = new SolidColorBrush(Color.FromRgb(36, 48, 67)), Foreground = Brushes.White,
+            FontFamily = new FontFamily("Segoe UI, Microsoft YaHei UI"), Content = body
+        };
+        body.Children.Add(new TextBlock { Text = "从绿色版迁移", FontSize = 19, FontWeight = FontWeights.SemiBold });
+        body.Children.Add(new TextBlock { Text = "可导入原有布局、日程和飞鸽传书记录。已接收的文件留在原目录。",
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 14) });
+        var actions = new WrapPanel();
+        body.Children.Add(actions);
+        AddButton(actions, "从空白开始", () => dialog.Close());
+        var migrate = new Button { Content = "选择绿色版目录…" };
+        actions.Children.Add(migrate);
+        var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
+        body.Children.Add(status);
+        var busy = false;
+        dialog.Closing += (_, e) => e.Cancel = busy;
+        migrate.Click += async (_, _) =>
+        {
+            var picker = new OpenFolderDialog { Title = "选择包含 AppKeeper.exe 的目录" };
+            if (picker.ShowDialog(dialog) != true)
+                return;
+            busy = true;
+            actions.IsEnabled = false;
+            status.Text = "正在复制并验证数据…";
+            try
+            {
+                await System.Threading.Tasks.Task.Run(() => PortableMigration.Run(picker.FolderName, profile.DataDirectory));
+                busy = false;
+                dialog.Close();
+            }
+            catch (Exception error) when (error is System.IO.IOException or System.IO.InvalidDataException or
+                System.Text.Json.JsonException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or
+                System.Security.Cryptography.CryptographicException)
+            {
+                status.Text = error.Message;
+                busy = false;
+                actions.IsEnabled = true;
+            }
+        };
+        dialog.ShowDialog();
+    }
+
+    private static void OpenLink(Window owner, string url)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+        catch (System.ComponentModel.Win32Exception error)
+        {
+            MessageBox.Show(owner, error.Message, owner.Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private static void AddButton(Panel panel, string label, Action action)

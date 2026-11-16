@@ -41,3 +41,35 @@ jobs:
           name: AppKeeper-win-x64
           path: artifacts/win-x64/AppKeeper.exe
           if-no-files-found: error
+
+  store:
+    name: Build EasyAppKeeper MSIX
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build Store submission package
+        shell: pwsh
+        run: |
+          $sdk = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+          $tool = Get-ChildItem -LiteralPath $sdk -Directory |
+            Where-Object { $_.Name -match '^10\.\d+\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            ForEach-Object { Join-Path $_.FullName 'x64\MakeAppx.exe' } |
+            Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          $package = ./packaging/store/Build-StorePackage.ps1 -MakeAppx $tool
+          "EASYAPPKEEPER_MSIX=$($package.FullName)" >> $env:GITHUB_ENV
+          "EASYAPPKEEPER_SIGNTOOL=$(Join-Path (Split-Path -Parent $tool) 'SignTool.exe')" >> $env:GITHUB_ENV
+      - name: Verify Windows registration and activation
+        shell: pwsh
+        run: ./packaging/store/Test-StorePackage.ps1 -Package $env:EASYAPPKEEPER_MSIX -SignTool $env:EASYAPPKEEPER_SIGNTOOL
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EasyAppKeeper-store-x64
+          path: artifacts/store/*.msix
+          if-no-files-found: error

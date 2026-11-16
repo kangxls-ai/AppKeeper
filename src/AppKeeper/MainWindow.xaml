@@ -33,7 +33,7 @@
                     <Button x:Name="MaximizeButton" Content="□" Click="ToggleMaximize" ToolTip="最大化" AutomationProperties.Name="最大化" Padding="9,3"/>
                     <Button Content="×" Click="HideClicked" ToolTip="隐藏" AutomationProperties.Name="隐藏" Padding="9,3"/>
                 </StackPanel>
-                <TextBlock Text="AppKeeper" VerticalAlignment="Center" Margin="8,0" FontWeight="SemiBold" IsHitTestVisible="False"/>
+                <TextBlock x:Name="ProductTitle" Text="AppKeeper" VerticalAlignment="Center" Margin="8,0" FontWeight="SemiBold" IsHitTestVisible="False"/>
             </DockPanel>
             <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
