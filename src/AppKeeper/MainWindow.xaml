@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AppKeeper" Icon="Assets/AppKeeper.ico" WindowStyle="None" ResizeMode="CanResize"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False" Topmost="True"
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True"
         Width="820" Height="600" MinWidth="300" MinHeight="390"
         FontFamily="Segoe UI, Microsoft YaHei UI" Foreground="White" UseLayoutRounding="True"
-        PreviewKeyDown="HandleKey" Closing="HideOnClose"
+        PreviewKeyDown="HandleKey" Closing="HideOnClose" StateChanged="UpdateWindowControls"
         AllowDrop="True" PreviewDragOver="RevealHomeForDrag" DragOver="WindowDragOver" Drop="WindowDrop">
     <Window.Resources>
         <Style x:Key="TileButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
@@ -25,8 +25,26 @@
                 <GradientStop Color="#E92E2541" Offset="1"/>
             </LinearGradientBrush>
         </Border.Background>
-        <Grid x:Name="Root">
-            <Grid x:Name="Workspace" Margin="17,9,17,12">
+        <Grid x:Name="Root" Margin="10,6,10,6">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <DockPanel Background="Transparent" Height="37" MouseLeftButtonDown="MoveWindow">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="−" Click="MinimizeWindow" ToolTip="最小化" AutomationProperties.Name="最小化" Padding="9,3"/>
+                    <Button x:Name="MaximizeButton" Content="□" Click="ToggleMaximize" ToolTip="最大化" AutomationProperties.Name="最大化" Padding="9,3"/>
+                    <Button Content="×" Click="HideClicked" ToolTip="隐藏" AutomationProperties.Name="隐藏" Padding="9,3"/>
+                </StackPanel>
+                <TextBlock Text="AppKeeper" VerticalAlignment="Center" Margin="8,0" FontWeight="SemiBold" IsHitTestVisible="False"/>
+            </DockPanel>
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <StackPanel x:Name="PageRail" Margin="0,10,6,0">
+                    <Button x:Name="AppsTab" Content="快捷应用" Click="OpenAppsPage" Padding="7,8" Margin="0,0,0,5"/>
+                    <Button x:Name="PigeonTab" Content="飞鸽传书" Click="OpenPigeonPage" Padding="7,8" Margin="0,0,0,5"/>
+                    <Button x:Name="AgendaTab" Content="日程管理" Click="OpenAgendaPage" Padding="7,8"/>
+                </StackPanel>
+                <ContentControl Grid.Column="1" x:Name="ModuleHost" Visibility="Collapsed" Margin="6,7,2,8"/>
+                <Grid Grid.Column="1" x:Name="AppsPage">
+            <Grid x:Name="Workspace" Margin="7,5,7,7">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -36,30 +54,28 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <Grid Background="Transparent" Height="36" MouseLeftButtonDown="MoveWindow">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsHitTestVisible="False">
-                        <Image Source="Assets/AppKeeper.ico" Width="23" Height="23" Margin="0,0,7,0"/>
-                        <TextBlock Text="AppKeeper" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    </StackPanel>
+                <Grid Height="33">
+                    <TextBlock Text="快捷应用" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button x:Name="AddButton" Content="＋" Click="OpenAdd" Padding="9,4" Margin="0,0,5,0"
                                 ToolTip="添加入口" AutomationProperties.Name="添加入口"/>
                         <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" Padding="9,4" Margin="0,0,5,0"
                                 ToolTip="设置" AutomationProperties.Name="设置" Click="OpenSettings"/>
-                        <Button Content="×" Click="HideClicked" Padding="9,4" ToolTip="隐藏 (Esc)"
-                                AutomationProperties.Name="隐藏"/>
                     </StackPanel>
                 </Grid>
-                <Grid Grid.Row="1" Margin="0,11,0,0">
-                    <TextBox x:Name="SearchBox" Padding="35,10,12,10" Height="48" FontSize="17"
-                             VerticalContentAlignment="Center" Background="#8933475C"
-                             AutomationProperties.Name="搜索应用" TextChanged="SearchChanged"/>
-                    <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" Margin="12,0,0,0"
-                               VerticalAlignment="Center" Foreground="{StaticResource Secondary}" IsHitTestVisible="False"/>
-                    <TextBlock x:Name="SearchHint" Text="搜索应用、拼音或首字母" Margin="36,0,9,0"
-                               FontSize="14" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
-                               Foreground="{StaticResource Secondary}" IsHitTestVisible="False"/>
-                </Grid>
+                <Border Grid.Row="1" Margin="0,7,0,0" CornerRadius="10" BorderBrush="#64B0CADF" BorderThickness="1" Background="#BC263A50">
+                    <DockPanel MinHeight="49" Margin="10,0">
+                        <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="Segoe MDL2 Assets" Margin="0,0,9,0"
+                                   VerticalAlignment="Center" Foreground="{StaticResource Secondary}"/>
+                        <Grid>
+                            <TextBox x:Name="SearchBox" Style="{x:Null}" BorderThickness="0" Padding="0" FontSize="17"
+                                     Background="Transparent" Foreground="White" CaretBrush="White" VerticalContentAlignment="Center"
+                                     AutomationProperties.Name="搜索应用" TextChanged="SearchChanged"/>
+                            <TextBlock x:Name="SearchHint" Text="搜索应用或拼音" FontSize="14" TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" Foreground="{StaticResource Secondary}" IsHitTestVisible="False"/>
+                        </Grid>
+                    </DockPanel>
+                </Border>
                 <DockPanel Grid.Row="2" Margin="0,8,0,0" LastChildFill="True">
                     <Button Content="＋ 标签" Click="CreateTag" DockPanel.Dock="Right" Padding="8,4"
                             VerticalAlignment="Top" Margin="7,0,0,0"/>
@@ -114,7 +130,9 @@
                     </Grid>
                 </Border>
             </Grid>
-            <Thumb HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="17" Height="17" Cursor="SizeNWSE"
+                </Grid>
+            </Grid>
+            <Thumb x:Name="ResizeThumb" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="17" Height="17" Cursor="SizeNWSE"
                    DragDelta="ResizeWindow" AutomationProperties.Name="调整窗口大小">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">

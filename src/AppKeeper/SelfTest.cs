@@ -88,7 +88,9 @@ internal static class SelfTest
                 throw new InvalidOperationException("Test failed: reject invalid import");
             }
             catch (InvalidDataException) { }
-            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms");
+            CheckSearchViewport();
+            System.Threading.Tasks.Task.Run(() => ModuleSelfTest.Run(directory)).GetAwaiter().GetResult();
+            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · encrypted pairing, offline delivery, ZIP, resume, MarkDo");
             return 0;
         }
         catch (Exception error)
@@ -104,6 +106,26 @@ internal static class SelfTest
         var file = Environment.GetEnvironmentVariable("APPKEEPER_SELFTEST_LOG");
         if (!string.IsNullOrEmpty(file))
             File.WriteAllText(file, result);
+    }
+
+    private static void CheckSearchViewport()
+    {
+        var launcher = new MainWindow((App)System.Windows.Application.Current);
+        try
+        {
+            foreach (var width in new[] { 300, 820 })
+            {
+                var viewport = new System.Windows.Size(width, 390);
+                launcher.SearchBox.Text = "搜索测试 test";
+                launcher.Root.Measure(viewport);
+                launcher.Root.Arrange(new System.Windows.Rect(viewport));
+                launcher.Root.UpdateLayout();
+                var editor = launcher.SearchBox.Template.FindName("PART_ContentHost", launcher.SearchBox)
+                    as System.Windows.Controls.ScrollViewer;
+                Check(editor is { ActualHeight: >= 24, ActualWidth: >= 94 }, "search text viewport at width " + width);
+            }
+        }
+        finally { launcher.CloseForExit(); }
     }
 
     private static void Check(bool passed, string label)

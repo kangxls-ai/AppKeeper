@@ -23,6 +23,11 @@ public partial class App : Application
     private Forms.NotifyIcon? tray;
     private System.Drawing.Icon? trayIcon;
     private DispatcherTimer? scanTimer;
+    private DispatcherTimer? reminderTimer;
+    private PigeonService? pigeon;
+    private AgendaStore? agenda;
+    private string moduleWarning = "";
+    private DateTimeOffset previousReminderCheck = DateTimeOffset.Now;
     private MainWindow? launcher;
     private FloatingBall? ball;
     private Library data = new();
@@ -35,6 +40,8 @@ public partial class App : Application
     private string hotkeyNotice = "";
 
     internal Library Data => data;
+    internal PigeonService Pigeon => pigeon ??= new PigeonService(AppContext.BaseDirectory);
+    internal AgendaStore Agenda => agenda ??= new AgendaStore(AppContext.BaseDirectory);
     internal string Status => string.Join("　", new[] { notice, scanNotice, hotkeyNotice }.Where(text => text.Length > 0));
 
     protected override void OnStartup(StartupEventArgs e)
@@ -81,6 +88,14 @@ public partial class App : Application
         messages.AddHook(OnMessage);
         RegisterShortcut();
         CreateTray();
+        if (writable)
+        {
+            try { _ = Pigeon; }
+            catch (Exception error) { moduleWarning = "飞鸽传书初始化失败：" + error.Message; }
+            reminderTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            reminderTimer.Tick += (_, _) => CheckAgendaReminders();
+            reminderTimer.Start();
+        }
         ball = new FloatingBall(ShowHomeFromBall, position =>
         {
             if (writable)
@@ -99,8 +114,8 @@ public partial class App : Application
 
         if (!e.Args.Contains("--background"))
             ShowLauncher();
-        else if (Status.Length > 0)
-            tray!.ShowBalloonTip(5000, "AppKeeper", Status, Forms.ToolTipIcon.Warning);
+        else if (Status.Length > 0 || moduleWarning.Length > 0)
+            tray!.ShowBalloonTip(5000, "AppKeeper", Status + " " + moduleWarning, Forms.ToolTipIcon.Warning);
 
         if (writable)
             _ = Refresh();
@@ -132,6 +147,29 @@ public partial class App : Application
     }
 
     private MainWindow GetLauncher() => launcher ??= new MainWindow(this);
+
+    private void CheckAgendaReminders()
+    {
+        var now = DateTimeOffset.Now;
+        var from = previousReminderCheck;
+        previousReminderCheck = now;
+        try
+        {
+            var store = Agenda;
+            if (!store.Reminders) return;
+            var messages = store.Tasks().Where(task => task.Completed == null)
+                .SelectMany(task => new[]
+                {
+                    (When: task.StartTime && task.Actual == null ? task.Start : null, Text: "开始 · " + task.Title),
+                    (When: task.StartTime && task.Actual == null ? task.Start?.AddMinutes(30) : null, Text: "开始提醒 · " + task.Title),
+                    (When: task.DueTime ? task.Due?.AddMinutes(-30) : null, Text: "即将截止 · " + task.Title),
+                    (When: task.DueTime ? task.Due : null, Text: "截止 · " + task.Title)
+                }).Where(item => item.When > from && item.When <= now).Select(item => item.Text).ToArray();
+            if (messages.Length > 0)
+                tray?.ShowBalloonTip(8000, "日程管理", string.Join("\n", messages.Take(4)), Forms.ToolTipIcon.Info);
+        }
+        catch (Exception error) { System.Diagnostics.Trace.TraceWarning(error.Message); }
+    }
     private void ShowLauncher() => GetLauncher().Reveal();
     private void ShowHomeFromBall() => GetLauncher().RevealHome();
     private void DisplaySettingsChanged(object? sender, EventArgs args) =>
@@ -139,7 +177,7 @@ public partial class App : Application
 
     private void ToggleLauncher()
     {
-        if (launcher is { IsVisible: true })
+        if (launcher is { IsVisible: true, WindowState: not WindowState.Minimized })
             launcher.Conceal();
         else
             ShowLauncher();
@@ -343,6 +381,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        reminderTimer?.Stop();
+        pigeon?.Dispose();
         SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
         scanTimer?.Stop();
         showWait?.Unregister(null);

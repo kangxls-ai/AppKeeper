@@ -3,3 +3,7 @@ obj/
 artifacts/
 .vs/
 AppKeeper.data.json*
+AppKeeper.pigeon.*
+AppKeeper.agenda.*
+pigeon-transfer/
+share/

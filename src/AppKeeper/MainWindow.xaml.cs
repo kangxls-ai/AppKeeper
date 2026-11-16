@@ -36,12 +36,16 @@ public partial class MainWindow : Window
     private bool closingForExit;
     private Guid? openFolder;
     private string? selectedTag;
+    private PigeonPage? pigeonPage;
+    private AgendaPage? agendaPage;
+    private bool firstReveal = true;
     private string Query => SearchBox.Text.Trim();
 
     internal MainWindow(App app)
     {
         this.app = app;
         InitializeComponent();
+        AppsTab.Background = activeBrush;
         ready = true;
         SourceInitialized += (_, _) =>
         {
@@ -53,13 +57,23 @@ public partial class MainWindow : Window
 
     private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message == 0x007E && IsVisible)
+        if (message == 0x007E && IsVisible && WindowState == WindowState.Normal)
             _ = Dispatcher.BeginInvoke(CenterOnCursorMonitor);
+        if (message == 0x0024)
+        {
+            var screen = Forms.Screen.FromHandle(hwnd);
+            var info = Marshal.PtrToStructure<MinMaxInfo>(lParam);
+            info.MaxPosition = new NativePoint { X = screen.WorkingArea.Left - screen.Bounds.Left, Y = screen.WorkingArea.Top - screen.Bounds.Top };
+            info.MaxSize = new NativePoint { X = screen.WorkingArea.Width, Y = screen.WorkingArea.Height };
+            Marshal.StructureToPtr(info, lParam, false);
+        }
         return IntPtr.Zero;
     }
 
     internal void Reveal()
     {
+        if (WindowState == WindowState.Minimized)
+            WindowState = lastRestorableState;
         if (IsVisible)
         {
             Activate();
@@ -67,16 +81,22 @@ public partial class MainWindow : Window
         }
 
         _ = new WindowInteropHelper(this).EnsureHandle();
-        CenterOnCursorMonitor();
+        if (firstReveal)
+        {
+            CenterOnCursorMonitor();
+            firstReveal = false;
+        }
         Show();
         Activate();
         RefreshData();
-        SearchBox.Focus();
+        if (AppsPage.IsVisible)
+            SearchBox.Focus();
         Root.BeginAnimation(OpacityProperty, new DoubleAnimation(.8, 1, TimeSpan.FromMilliseconds(135)));
     }
 
     internal void RevealHome()
     {
+        ShowModule(null, AppsTab);
         if (!IsVisible)
         {
             selectedTag = null;
@@ -442,6 +462,8 @@ public partial class MainWindow : Window
 
     private void WindowDragOver(object sender, DragEventArgs e)
     {
+        if (!AppsPage.IsVisible)
+            return;
         if (Dragged(e) is { } source && !openFolder.HasValue)
         {
             var x = e.GetPosition(this).X;
@@ -469,6 +491,8 @@ public partial class MainWindow : Window
 
     private void WindowDrop(object sender, DragEventArgs e)
     {
+        if (!AppsPage.IsVisible)
+            return;
         if (Dragged(e) is { } entry && !openFolder.HasValue && (!inbox || entry.Kind != EntryKind.Group))
         {
             app.Commit(library =>
@@ -686,16 +710,65 @@ public partial class MainWindow : Window
 
     private void MoveWindow(object sender, MouseButtonEventArgs e)
     {
-        if (ReferenceEquals(e.OriginalSource, sender))
+        if (!ReferenceEquals(e.OriginalSource, sender))
+            return;
+        if (e.ClickCount == 2)
+            ToggleMaximize(sender, e);
+        else if (WindowState == WindowState.Normal)
             DragMove();
     }
 
     private void ResizeWindow(object sender, DragDeltaEventArgs e)
     {
+        if (WindowState != WindowState.Normal)
+            return;
         var area = Forms.Screen.FromHandle(handle).WorkingArea;
         var scale = VisualTreeHelper.GetDpi(this);
         Width = Math.Clamp(Width + e.HorizontalChange, MinWidth, Math.Max(MinWidth, area.Width / scale.DpiScaleX));
         Height = Math.Clamp(Height + e.VerticalChange, MinHeight, Math.Max(MinHeight, area.Height / scale.DpiScaleY));
+    }
+
+    private WindowState lastRestorableState = WindowState.Normal;
+
+    private void MinimizeWindow(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void ToggleMaximize(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void UpdateWindowControls(object? sender, EventArgs e)
+    {
+        if (MaximizeButton == null)
+            return;
+        if (WindowState != WindowState.Minimized)
+            lastRestorableState = WindowState;
+        var maximized = WindowState == WindowState.Maximized;
+        MaximizeButton.Content = maximized ? "❐" : "□";
+        MaximizeButton.ToolTip = maximized ? "还原窗口" : "最大化";
+        AutomationProperties.SetName(MaximizeButton, (string)MaximizeButton.ToolTip);
+        ResizeThumb.Visibility = maximized ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OpenAppsPage(object sender, RoutedEventArgs e) => ShowModule(null, AppsTab);
+    private void OpenPigeonPage(object sender, RoutedEventArgs e) =>
+        OpenModule(() => pigeonPage ??= new PigeonPage(app.Pigeon), PigeonTab);
+    private void OpenAgendaPage(object sender, RoutedEventArgs e) =>
+        OpenModule(() => agendaPage ??= new AgendaPage(app.Agenda), AgendaTab);
+
+    private void OpenModule(Func<FrameworkElement> create, Button button)
+    {
+        try { ShowModule(create(), button); }
+        catch (Exception error) { ModuleUi.Error(this, error); }
+    }
+
+    private void ShowModule(FrameworkElement? view, Button selected)
+    {
+        CloseFolder();
+        AppsPage.Visibility = view == null ? Visibility.Visible : Visibility.Collapsed;
+        AllowDrop = view == null;
+        ModuleHost.Content = view;
+        ModuleHost.Visibility = view == null ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var button in new[] { AppsTab, PigeonTab, AgendaTab })
+            button.Background = button == selected ? activeBrush : Brushes.Transparent;
     }
 
     private void ResizeTiles(object sender, SizeChangedEventArgs e) => RefreshData();
@@ -716,4 +789,12 @@ public partial class MainWindow : Window
 
     [DllImport("shcore.dll")]
     private static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint x, out uint y);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MinMaxInfo
+    {
+        public NativePoint Reserved, MaxSize, MaxPosition, MinTrackSize, MaxTrackSize;
+    }
 }
