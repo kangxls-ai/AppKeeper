@@ -58,6 +58,9 @@
                 <Grid Height="33">
                     <TextBlock Text="快捷应用" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Padding="8,4" Margin="0,0,5,0"
+                                ToolTip="管理搜索和访问记录" AutomationProperties.Name="管理搜索和访问记录"
+                                Click="OpenHistoryMenu"/>
                         <Button x:Name="AddButton" Content="＋" Click="OpenAdd" Padding="9,4" Margin="0,0,5,0"
                                 ToolTip="添加入口" AutomationProperties.Name="添加入口"/>
                         <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" Padding="9,4" Margin="0,0,5,0"
@@ -149,7 +152,7 @@
                 </Grid>
             </Grid>
             <Thumb x:Name="ResizeThumb" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="17" Height="17" Cursor="SizeNWSE"
-                   DragDelta="ResizeWindow" AutomationProperties.Name="调整窗口大小">
+                   DragDelta="ResizeWindow" DragCompleted="FinishResize" AutomationProperties.Name="调整窗口大小">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">
                         <Grid Background="Transparent">

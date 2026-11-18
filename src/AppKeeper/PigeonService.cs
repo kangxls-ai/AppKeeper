@@ -10,6 +10,7 @@ using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,17 @@ namespace AppKeeper;
 internal sealed class PigeonService : IDisposable
 {
     private const int DiscoveryPort = 48619;
+    internal const int MessageLimit = 2000;
+    // Older versions could already send up to 12,000 UTF-16 units.
+    private const int LegacyReceiveLimit = 12000;
+
+    internal static int MessageLength(string text)
+    {
+        var count = 0;
+        foreach (var rune in text.Trim().EnumerateRunes())
+            count++;
+        return count;
+    }
     private readonly string root;
     private readonly string statePath;
     private readonly string staging;
@@ -160,8 +172,8 @@ internal sealed class PigeonService : IDisposable
     public void SendText(string peer, string text)
     {
         text = text.Trim();
-        if (text.Length is < 1 or > 12000)
-            throw new ArgumentException("文字消息须在 1 至 12000 字之间。");
+        if (MessageLength(text) is < 1 or > MessageLimit)
+            throw new ArgumentException($"文字消息须在 1 至 {MessageLimit} 字符之间。");
         RequirePeer(peer);
         Edit(d => d.Items.Add(new(Guid.NewGuid(), peer, true, "text", text, DateTimeOffset.Now, "queued")));
     }
@@ -187,7 +199,8 @@ internal sealed class PigeonService : IDisposable
                 using var file = File.OpenRead(input);
                 var hash = Convert.ToHexString(SHA256.HashData(file));
                 return new PigeonItem(id, peer, true, "file", SafeName(name), DateTimeOffset.Now,
-                    "queued", file.Length, input, hash, SourceModified: File.GetLastWriteTimeUtc(input));
+                    "queued", file.Length, input, hash, SourceModified: File.GetLastWriteTimeUtc(input),
+                    OriginalFolder: packaged ? source : null);
             }
             catch
             {
@@ -234,19 +247,28 @@ internal sealed class PigeonService : IDisposable
 
     public void Retry(Guid id) => SetState(id, "queued");
 
-    public void ClearHistory(string peer) => Edit(d =>
+    public void ClearHistory(string peer)
     {
-        for (var i = d.Items.Count - 1; i >= 0; i--)
+        var removed = new List<PigeonItem>();
+        Edit(d =>
         {
-            var item = d.Items[i];
-            if (item.Peer != peer || item.State is not ("sent" or "saved" or "rejected" or "cancelled"))
-                continue;
-            if (item.Outgoing)
-                d.Items.RemoveAt(i);
-            else
-                d.Items[i] = item with { Archived = true, Value = "", Path = null };
-        }
-    });
+            for (var i = d.Items.Count - 1; i >= 0; i--)
+            {
+                var item = d.Items[i];
+                if (item.Peer != peer || item.State is not ("sent" or "saved" or "rejected" or "cancelled"))
+                    continue;
+                if (item.Outgoing)
+                {
+                    d.Items.RemoveAt(i);
+                    removed.Add(item);
+                }
+                else
+                    d.Items[i] = item with { Archived = true, Value = "", Path = null };
+            }
+        });
+        foreach (var item in removed)
+            CleanOutgoing(item);
+    }
 
     private void RequirePeer(string peer)
     {
@@ -365,7 +387,7 @@ internal sealed class PigeonService : IDisposable
 
     private async Task HandleMessage(SslStream stream, string remote, PigeonPacket packet, CancellationToken token)
     {
-        if (packet.Op == "text" && packet.Id != Guid.Empty && packet.Text is { Length: > 0 and <= 12000 } text)
+        if (packet.Op == "text" && packet.Id != Guid.Empty && packet.Text is { Length: > 0 and <= LegacyReceiveLimit } text)
         {
             lock (gate)
             {
@@ -598,7 +620,8 @@ internal sealed class PigeonService : IDisposable
             if (answer.Op is "rejected" or "ok")
             {
                 SetState(item.Id, answer.Op == "ok" ? "sent" : "rejected");
-                CleanOutgoing(item);
+                if (answer.Op == "rejected")
+                    CleanOutgoing(item);
             }
         }
         catch (Exception ex) when (ex is IOException or SocketException or AuthenticationException or

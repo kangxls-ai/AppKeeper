@@ -9,13 +9,16 @@ namespace AppKeeper;
 
 public partial class MainWindow
 {
+    private string? suppressedSearch;
+
     private void SaveQuickHistory(Guid? visited = null)
     {
         searchHistoryTimer.Stop();
         if (!IsVisible)
             return;
         var query = Query;
-        var saveSearch = query.Length > 0 && app.Data.SearchHistory.FirstOrDefault() != query;
+        var saveSearch = query.Length > 0 && !query.Equals(suppressedSearch, StringComparison.OrdinalIgnoreCase) &&
+            app.Data.SearchHistory.FirstOrDefault() != query;
         var saveVisit = visited.HasValue && app.Data.RecentEntries.FirstOrDefault() != visited.Value;
         if (!saveSearch && !saveVisit)
             return;
@@ -52,6 +55,10 @@ public partial class MainWindow
                 SaveQuickHistory();
                 SearchBox.Focus();
             };
+            button.ToolTip = $"{query}\n右键可清除此记录";
+            var menu = new ContextMenu();
+            AddItem(menu, "清除此搜索记录", () => ClearSearchHistory(query));
+            button.ContextMenu = menu;
             SearchHistoryBar.Children.Add(button);
         }
     }
@@ -82,8 +89,47 @@ public partial class MainWindow
             button.Click += (_, _) => ActivateEntry(entry);
             var menu = new ContextMenu();
             AddPinAction(menu, entry);
+            menu.Items.Add(new Separator());
+            AddItem(menu, pinned ? "清除此锁定记录…" : "清除此访问记录", () =>
+            {
+                if (!pinned || MessageBox.Show(this, $"清除「{entry.Name}」的访问记录并取消锁定？",
+                    "清除锁定记录", MessageBoxButton.YesNo, MessageBoxImage.Question,
+                    MessageBoxResult.No) == MessageBoxResult.Yes)
+                    app.Commit(data => QuickHistory.RemoveVisit(data, entry.Id));
+            });
             button.ContextMenu = menu;
             RecentEntriesBar.Children.Add(button);
+        }
+    }
+
+    private void OpenHistoryMenu(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = (Button)sender, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom
+        };
+        AddItem(menu, "清空搜索记录", () => ClearSearchHistory());
+        ((MenuItem)menu.Items[0]).IsEnabled = app.Data.SearchHistory.Count > 0;
+        AddItem(menu, "清空未锁定的访问记录", () => app.Commit(QuickHistory.ClearUnpinnedVisits));
+        var pinned = app.Data.PinnedEntries.ToHashSet();
+        ((MenuItem)menu.Items[1]).IsEnabled = app.Data.RecentEntries.Any(id => !pinned.Contains(id));
+        menu.IsOpen = true;
+    }
+
+    private void ClearSearchHistory(string? query = null)
+    {
+        if (!app.Commit(data =>
+        {
+            if (query == null)
+                data.SearchHistory.Clear();
+            else
+                QuickHistory.RemoveSearch(data, query);
+        }))
+            return;
+        if (query == null || Query.Equals(query, StringComparison.OrdinalIgnoreCase))
+        {
+            searchHistoryTimer.Stop();
+            suppressedSearch = Query;
         }
     }
 

@@ -44,6 +44,7 @@ public partial class MainWindow : Window
     private PigeonPage? pigeonPage;
     private AgendaPage? agendaPage;
     private bool firstReveal = true;
+    private bool nativeSizing;
     private string Query => SearchBox.Text.Trim();
     private bool CanArrangeEntries => selectedTag == null && Query.Length == 0;
 
@@ -52,6 +53,11 @@ public partial class MainWindow : Window
         this.app = app;
         InitializeComponent();
         Title = ProductTitle.Text = app.ProductName;
+        if (app.Data.WindowSize is { IsValid: true } size)
+        {
+            Width = size.Width;
+            Height = size.Height;
+        }
         AppsTab.Background = activeBrush;
         ready = true;
         SourceInitialized += (_, _) =>
@@ -71,6 +77,13 @@ public partial class MainWindow : Window
     {
         if (message == 0x007E && IsVisible && WindowState == WindowState.Normal)
             _ = Dispatcher.BeginInvoke(CenterOnCursorMonitor);
+        if (message == 0x0214) // WM_SIZING
+            nativeSizing = true;
+        if (message == 0x0232 && nativeSizing) // WM_EXITSIZEMOVE
+        {
+            nativeSizing = false;
+            _ = Dispatcher.BeginInvoke(RememberWindowSize);
+        }
         if (message == 0x0024)
         {
             var screen = Forms.Screen.FromHandle(hwnd);
@@ -593,7 +606,9 @@ public partial class MainWindow : Window
         if (!ready)
             return;
         searchHistoryTimer.Stop();
-        if (Query.Length > 0 && IsVisible)
+        if (!Query.Equals(suppressedSearch, StringComparison.OrdinalIgnoreCase))
+            suppressedSearch = null;
+        if (Query.Length > 0 && IsVisible && suppressedSearch == null)
             searchHistoryTimer.Start();
         CloseFolder();
         page = 0;
@@ -622,6 +637,8 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Escape)
             Conceal();
+        else if (!AppsPage.IsVisible)
+            return;
         else if (e.Key == Key.Enter && SearchBox.IsKeyboardFocusWithin && Query.Length > 0)
         {
             if (Tiles.Children.Count > 0 && Tiles.Children[0] is Button { Tag: Entry entry })
@@ -822,6 +839,22 @@ public partial class MainWindow : Window
         var scale = VisualTreeHelper.GetDpi(this);
         Width = Math.Clamp(Width + e.HorizontalChange, MinWidth, Math.Max(MinWidth, area.Width / scale.DpiScaleX));
         Height = Math.Clamp(Height + e.VerticalChange, MinHeight, Math.Max(MinHeight, area.Height / scale.DpiScaleY));
+    }
+
+    private void FinishResize(object sender, DragCompletedEventArgs e)
+    {
+        if (e.HorizontalChange != 0 || e.VerticalChange != 0)
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, (Action)RememberWindowSize);
+    }
+
+    private void RememberWindowSize()
+    {
+        if (!IsVisible || WindowState != WindowState.Normal)
+            return;
+        var size = new LauncherSize(Math.Round(Math.Max(MinWidth, ActualWidth)),
+            Math.Round(Math.Max(MinHeight, ActualHeight)));
+        if (size.IsValid && size != app.Data.WindowSize)
+            app.Commit(data => data.WindowSize = size, quiet: true);
     }
 
     private WindowState lastRestorableState = WindowState.Normal;

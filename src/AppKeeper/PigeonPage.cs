@@ -6,6 +6,9 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace AppKeeper;
@@ -21,6 +24,7 @@ internal sealed class PigeonPage : UserControl
     private readonly TextBlock title = ModuleUi.Text("选择电脑", true, 18);
     private readonly TextBlock status = ModuleUi.Text("");
     private readonly TextBox input = ModuleUi.Input();
+    private readonly TextBlock length = ModuleUi.Text("", size: 11);
     private readonly Button send;
     private readonly Button file;
     private readonly Button folder;
@@ -61,6 +65,13 @@ internal sealed class PigeonPage : UserControl
         conversation.Children.Add(heading);
         var composer = new StackPanel { Margin = new(0, 5, 0, 0) };
         DockPanel.SetDock(composer, Dock.Bottom);
+        input.AcceptsReturn = true;
+        input.TextWrapping = TextWrapping.Wrap;
+        input.MinLines = 2;
+        input.MaxLines = 3;
+        input.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        input.ToolTip = "Enter 发送，Shift+Enter 换行";
+        AutomationProperties.SetName(input, "输入传书消息");
         composer.Children.Add(input);
         var actions = new WrapPanel { Margin = new(0, 5, 0, 0) };
         send = ModuleUi.Button("发送", Send, true);
@@ -69,13 +80,22 @@ internal sealed class PigeonPage : UserControl
         actions.Children.Add(send);
         actions.Children.Add(file);
         actions.Children.Add(folder);
+        length.Margin = new Thickness(3, 0, 0, 4);
+        length.ToolTip = "Enter 发送，Shift+Enter 换行";
+        actions.Children.Add(length);
         composer.Children.Add(actions);
+        input.TextChanged += (_, _) => UpdateComposer(input.IsEnabled);
+        UpdateComposer(false);
         conversation.Children.Add(composer);
         history = new ScrollViewer { Content = messages, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         conversation.Children.Add(history);
-        input.KeyDown += (_, e) =>
+        input.PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == System.Windows.Input.Key.Enter) { Send(); e.Handled = true; }
+            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                e.Handled = true;
+                Send();
+            }
         };
         conversation.AllowDrop = true;
         conversation.DragOver += (_, e) =>
@@ -148,7 +168,8 @@ internal sealed class PigeonPage : UserControl
         var online = paired && service.Online(current!.Key);
         title.Text = current?.Name ?? "选择电脑";
         status.Text = current == null ? service.Warning : PeerState(current);
-        input.IsEnabled = send.IsEnabled = file.IsEnabled = folder.IsEnabled = paired;
+        input.IsEnabled = file.IsEnabled = folder.IsEnabled = paired;
+        UpdateComposer(paired);
         send.Content = online ? "发送" : "排队发送";
         var items = paired ? service.History(current!.Key) : [];
         if (items.SequenceEqual(previous)) return;
@@ -172,7 +193,8 @@ internal sealed class PigeonPage : UserControl
     private Border Message(PigeonItem item)
     {
         var details = new StackPanel();
-        details.Children.Add(ModuleUi.Text(item.Value, item.Kind == "file"));
+        var caption = ModuleUi.Text(item.Value, item.Kind == "file");
+        details.Children.Add(caption);
         var state = item.State switch
         {
             "queued" => item.Kind == "text" ? "等待送达" : "等待接收或重连",
@@ -202,13 +224,64 @@ internal sealed class PigeonPage : UserControl
             controls.Children.Add(ModuleUi.Button("取消", () => Action(() => service.Cancel(item.Id))));
         if (item.State == "failed")
             controls.Children.Add(ModuleUi.Button("重试", () => Action(() => service.Retry(item.Id))));
-        if (!item.Outgoing && item.Kind == "file" && item.State == "saved" && item.Path != null)
-            controls.Children.Add(ModuleUi.Button("打开所在文件夹", () => Action(() =>
-                Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { "/select,", item.Path }, UseShellExecute = false }))));
+        if (item.LocalFile is { } path)
+        {
+            void Open() => Action(() => OpenFile(path));
+            caption.Cursor = Cursors.Hand;
+            caption.ToolTip = "双击打开文件";
+            caption.Focusable = true;
+            AutomationProperties.SetName(caption, $"{item.Value}，双击或按 Enter 打开文件");
+            caption.MouseLeftButtonDown += (_, e) =>
+            {
+                if (e.ClickCount == 2)
+                {
+                    e.Handled = true;
+                    Open();
+                }
+            };
+            caption.KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter)
+                {
+                    e.Handled = true;
+                    Open();
+                }
+            };
+            var menu = new ContextMenu();
+            var open = new MenuItem { Header = "打开文件" };
+            open.Click += (_, _) => Open();
+            menu.Items.Add(open);
+            caption.ContextMenu = menu;
+            controls.Children.Add(ModuleUi.Button("打开所在文件夹", () => Action(() => RevealFile(path))));
+            if (item.OriginalFolder is { } original && Path.IsPathFullyQualified(original))
+                controls.Children.Add(ModuleUi.Button("打开原文件夹", () => Action(() => OpenDirectory(original))));
+        }
         details.Children.Add(controls);
         return new Border { Child = details, Background = item.Outgoing ? ModuleUi.Accent : System.Windows.Media.Brushes.DarkSlateGray,
             CornerRadius = new(10), Padding = new(8), Margin = new(0, 2, 6, 4),
             HorizontalAlignment = item.Outgoing ? HorizontalAlignment.Right : HorizontalAlignment.Left };
+    }
+
+    private static void OpenFile(string path)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException("找不到此文件，可能已移动或删除。");
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+    }
+
+    private static void RevealFile(string path)
+    {
+        if (File.Exists(path))
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = false });
+        else
+            OpenDirectory(Path.GetDirectoryName(path));
+    }
+
+    private static void OpenDirectory(string? path)
+    {
+        if (path == null || !Directory.Exists(path))
+            throw new DirectoryNotFoundException("找不到此文件夹，可能已移动或删除。");
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
     }
 
     private static string FormatSize(long bytes) => bytes >= 1_000_000_000 ? $"{bytes / 1e9:F2} GB" :
@@ -218,6 +291,15 @@ internal sealed class PigeonPage : UserControl
     {
         try { action(); Refresh(); }
         catch (Exception error) { ModuleUi.Error(this, error); }
+    }
+
+    private void UpdateComposer(bool paired)
+    {
+        var count = PigeonService.MessageLength(input.Text);
+        var overLimit = count > PigeonService.MessageLimit;
+        length.Text = $"{count}/{PigeonService.MessageLimit}";
+        length.Foreground = overLimit ? Brushes.LightSalmon : Brushes.LightSteelBlue;
+        send.IsEnabled = paired && count > 0 && !overLimit;
     }
 
     private void Send()

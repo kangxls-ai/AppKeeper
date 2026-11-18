@@ -60,11 +60,20 @@ internal static class ModuleSelfTest
 
         a.SendText(bKey, "离线排队一");
         a.SendText(bKey, "离线排队二");
+        var longMessage = new string('传', 1994) + "\n🐦🐦结束。";
+        Assert(PigeonService.MessageLength(longMessage) == 2000, "long message includes line break and emoji");
+        a.SendText(bKey, longMessage);
+        try
+        {
+            a.SendText(bKey, longMessage + "字");
+            throw new InvalidOperationException("Overlong message should be rejected");
+        }
+        catch (ArgumentException) { }
         Assert(a.History(bKey).All(item => item.State == "queued"), "offline messages persisted");
         using var receiver = new PigeonService(bDir);
         var aKey = receiver.Peers().Single().Key;
-        await Wait(() => receiver.History(aKey).Count(item => item.Kind == "text") == 2, "deliver on reconnect");
-        Assert(receiver.History(aKey).Select(item => item.Value).SequenceEqual(new[] { "离线排队一", "离线排队二" }),
+        await Wait(() => receiver.History(aKey).Count(item => item.Kind == "text") == 3, "deliver on reconnect");
+        Assert(receiver.History(aKey).Select(item => item.Value).SequenceEqual(new[] { "离线排队一", "离线排队二", longMessage }),
             "message order");
 
         var folder = Directory.CreateDirectory(Path.Combine(root, "folder")).FullName;
@@ -75,21 +84,34 @@ internal static class ModuleSelfTest
         using (var zip = ZipFile.OpenRead(item.Path!))
             Assert(zip.GetEntry("readme.txt") != null, "folder packed without extracting");
 
+        await Wait(() => a.History(bKey).Any(value => value.Id == item.Id && value.State == "sent"), "archive sent");
+        var outgoingFolder = a.History(bKey).Single(value => value.Id == item.Id);
+        var sentZip = outgoingFolder.LocalFile;
+        Assert(outgoingFolder.OriginalFolder == folder && sentZip != null && File.Exists(sentZip) &&
+            item.LocalFile == item.Path, "sent and saved zip files can both be opened");
+        using (var zip = ZipFile.OpenRead(sentZip!))
+            Assert(zip.GetEntry("readme.txt") != null, "retain a valid outgoing ZIP");
+
         receiver.Configure(bPort, Path.Combine(bDir, "share"), 1);
         var path = Path.Combine(root, "resume.txt");
         File.WriteAllText(path, "0123456789");
         await a.SendPath(bKey, path);
         await Wait(() => receiver.History(aKey).Any(item => item.Value == "resume.txt"), "file offer arrives");
         item = receiver.History(aKey).Single(item => item.Value == "resume.txt");
-        Assert(item.State == "pending", "oversize requires approval");
+        Assert(item.State == "pending" && item.LocalFile == null, "pending file cannot be opened");
         var partial = Path.Combine(item.Path!, ".appkeeper-" + item.Id.ToString("N") + ".partial");
         File.WriteAllText(partial, "0123");
         receiver.Answer(item.Id, true);
         await Wait(() => receiver.History(aKey).Any(value => value.Id == item.Id && value.State == "saved"), "resume from partial file");
         var received = receiver.History(aKey).Single(value => value.Id == item.Id);
         Assert(File.ReadAllText(received.Path!) == "0123456789", "resumed file contents");
+        await Wait(() => a.History(bKey).Any(value => value.Id == received.Id && value.State == "sent"), "ordinary file sent");
+        Assert(a.History(bKey).Single(value => value.Id == received.Id).LocalFile == path &&
+            received.LocalFile == received.Path, "ordinary files can be opened at either end");
         receiver.ClearHistory(aKey);
-        Assert(File.Exists(received.Path), "clear history preserves received files");
+        a.ClearHistory(bKey);
+        Assert(File.Exists(received.Path) && File.Exists(path) && Directory.Exists(folder) &&
+            !File.Exists(sentZip), "clear history removes generated outgoing zip only");
     }
 
     private static int Port()

@@ -33,9 +33,16 @@ internal sealed class Library
     public int Key { get; set; } = 32;
     public List<string> Tags { get; set; } = [];
     public BallPosition? Ball { get; set; }
+    public LauncherSize? WindowSize { get; set; }
     public List<string> SearchHistory { get; set; } = [];
     public List<Guid> RecentEntries { get; set; } = [];
     public List<Guid> PinnedEntries { get; set; } = [];
+}
+
+internal sealed record LauncherSize(double Width, double Height)
+{
+    internal bool IsValid =>
+        Width is >= 300 and <= 100_000 && Height is >= 390 and <= 100_000;
 }
 
 internal sealed record BallPosition(int X, int Y, string Monitor, DockEdge Edge);
@@ -144,6 +151,8 @@ internal sealed class LibraryStore(string directory)
                 throw new InvalidDataException("配置包含无效的应用入口或文件夹。");
         }
 
+        if (data.WindowSize is { IsValid: false })
+            data.WindowSize = null;
         data.Ignored = new HashSet<string>(data.Ignored, StringComparer.OrdinalIgnoreCase);
         data.SearchHistory = (data.SearchHistory ?? []).Where(query => !string.IsNullOrWhiteSpace(query))
             .Select(query => query.Trim()).Where(query => query.Length <= QuickHistory.QueryLimit)

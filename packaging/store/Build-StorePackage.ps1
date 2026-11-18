@@ -10,7 +10,7 @@ if (!$MakeAppx) {
     $tool = Get-Command makeappx.exe -ErrorAction SilentlyContinue
     if ($tool) { $MakeAppx = $tool.Source }
     else {
-        $sdk = Join-Path {env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+        $sdk = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
         $MakeAppx = Get-ChildItem -LiteralPath $sdk -Directory -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match '^10\.\d+\.\d+\.\d+$' } |
             Sort-Object { [version]$_.Name } -Descending |

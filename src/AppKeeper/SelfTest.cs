@@ -129,7 +129,7 @@ internal static class SelfTest
         Check(!portable.IsStore && portable.DataDirectory == source && packaged.IsStore &&
             packaged.DataDirectory.EndsWith(@"kangxls.EasyAppKeeper_test\LocalState\Data"), "separate portable and store environments");
         File.Create(Path.Combine(source, "AppKeeper.exe")).Dispose();
-        var library = new Library { Tags = ["工作"], SearchHistory = ["jisuanqi"] };
+        var library = new Library { Tags = ["工作"], SearchHistory = ["jisuanqi"], WindowSize = new(710, 490) };
         var entry = WindowsCatalog.FromUrl("https://example.com");
         Layout.AssignTag(library, entry, "工作");
         library.Entries.Add(entry);
@@ -157,7 +157,8 @@ internal static class SelfTest
         PortableMigration.Run(source, packaged.DataDirectory);
         var migrated = new LibraryStore(packaged.DataDirectory).Load(out _);
         Check(migrated.Tags.SequenceEqual(library.Tags) && migrated.PinnedEntries.SequenceEqual([entry.Id]) &&
-            migrated.SearchHistory.SequenceEqual(library.SearchHistory) && !migrated.StartWithWindows,
+            migrated.SearchHistory.SequenceEqual(library.SearchHistory) && migrated.WindowSize == library.WindowSize &&
+            !migrated.StartWithWindows,
             "migrate library and start with packaged startup disabled");
         Check(new AgendaStore(packaged.DataDirectory).Tasks().Single().Title == "既有日程", "migrate SQLite WAL data");
         using var copied = PigeonWire.Identity(Path.Combine(packaged.DataDirectory, "AppKeeper.pigeon.pfx"));
@@ -201,10 +202,30 @@ internal static class SelfTest
             "history and fixed entries round trip");
         Layout.Remove(restored, restored.Entries[0]);
         Check(restored.PinnedEntries.Count == 0 && QuickHistory.Entries(restored).Count() == 20, "remove stale pin");
+
+        var kept = restored.RecentEntries[0];
+        var removed = restored.RecentEntries[1];
+        restored.PinnedEntries.Add(kept);
+        QuickHistory.RemoveSearch(restored, "test 22");
+        QuickHistory.RemoveVisit(restored, removed);
+        Check(restored.SearchHistory.Count == 9 && restored.SearchHistory[0] != "TEST 22" &&
+            restored.RecentEntries.Count == 19 && !restored.RecentEntries.Contains(removed), "remove individual history");
+        QuickHistory.ClearUnpinnedVisits(restored);
+        Check(QuickHistory.Entries(restored).Single().Id == kept, "bulk clear preserves pinned visit");
+        QuickHistory.RemoveVisit(restored, kept);
+        restored.SearchHistory.Clear();
+        restored.WindowSize = new(765, 482);
+        store.Save(restored);
+        restored = store.Load(out _);
+        Check(restored.SearchHistory.Count == 0 && restored.RecentEntries.Count == 0 &&
+            restored.PinnedEntries.Count == 0 && restored.Entries.Any(entry => entry.Id == kept) &&
+            restored.WindowSize == new LauncherSize(765, 482), "cleared history and normal window size survive reload");
         File.WriteAllText(store.DataPath, """{"Version":1}""");
         restored = store.Load(out _);
         Check(restored.SearchHistory.Count == 0 && restored.RecentEntries.Count == 0 &&
-            restored.PinnedEntries.Count == 0, "old data loads with empty histories");
+            restored.PinnedEntries.Count == 0 && restored.WindowSize == null, "old data loads without histories or a window size");
+        File.WriteAllText(store.DataPath, """{"Version":1,"WindowSize":{"Width":0,"Height":500}}""");
+        Check(store.Load(out _).WindowSize == null, "invalid window size falls back to defaults");
     }
 
     private static void CheckTagOrganization(string directory)

@@ -24,6 +24,21 @@ internal static class QuickHistory
             MoveToFront(data.RecentEntries, id, EntryLimit, EqualityComparer<Guid>.Default);
     }
 
+    public static void RemoveSearch(Library data, string query) =>
+        data.SearchHistory.RemoveAll(item => item.Equals(query, StringComparison.OrdinalIgnoreCase));
+
+    public static void RemoveVisit(Library data, Guid id)
+    {
+        data.PinnedEntries.Remove(id);
+        data.RecentEntries.Remove(id);
+    }
+
+    public static void ClearUnpinnedVisits(Library data)
+    {
+        var pinned = data.PinnedEntries.ToHashSet();
+        data.RecentEntries.RemoveAll(id => !pinned.Contains(id));
+    }
+
     private static void MoveToFront<T>(List<T> list, T value, int limit, IEqualityComparer<T> comparer)
     {
         list.RemoveAll(item => comparer.Equals(item, value));
