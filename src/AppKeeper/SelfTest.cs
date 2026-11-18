@@ -90,6 +90,7 @@ internal static class SelfTest
             catch (InvalidDataException) { }
             CheckSearchViewport();
             CheckTagOrganization(directory);
+            CheckIndependentTagOrder(directory);
             CheckQuickHistory(directory);
             RecentUsageSelfTest.Run(directory);
             CheckPortableMigration(directory);
@@ -303,6 +304,75 @@ internal static class SelfTest
             }
         }
         finally { launcher.CloseForExit(); }
+    }
+
+    private static void CheckIndependentTagOrder(string directory)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(directory, "tag-entry-order")).FullName;
+        var library = new Library { Tags = ["工作", "个人"] };
+        var group = new Entry { Kind = EntryKind.Group, Name = "分组" };
+        var file = Path.Combine(folder, "file.txt");
+        File.WriteAllText(file, "test");
+        var entries = new[]
+        {
+            WindowsCatalog.FromPath(folder), WindowsCatalog.FromPath(file), WindowsCatalog.FromUrl("https://example.com"),
+            new Entry { Kind = EntryKind.File, Name = "已分组应用", Target = file, Group = group.Id }, group,
+            new Entry { Kind = EntryKind.Store, Name = "商店应用", Target = "Sample_123!App" }
+        };
+        foreach (var entry in entries) entry.Tags.AddRange(library.Tags);
+        library.Entries.AddRange(entries);
+        var initial = entries.Select(entry => entry.Id).ToArray();
+        Guid[] Order(string tag) => Layout.Visible(library, false, "", tag).Select(entry => entry.Id).ToArray();
+        Layout.Move(library, entries[5], entries[1], DropAction.Before);
+        Check(Order("工作").SequenceEqual(initial) && Order("个人").SequenceEqual(initial),
+            "global reordering preserves every tag's initial order before any manual tag sorting");
+        var global = library.Entries.Select(entry => entry.Id).ToArray();
+        Layout.OrderInTag(library, "工作", entries[3], entries[0], after: false);
+        var work = Order("工作");
+        Check(work.First() == entries[3].Id && library.Entries.Select(entry => entry.Id).SequenceEqual(global) &&
+            Order("个人").SequenceEqual(initial) && entries[3].Group == group.Id && !entries[3].Inbox,
+            "tag reordering does not mutate global order, other tags or group membership");
+        Layout.OrderInTag(library, "个人", entries[0], null, after: true);
+        Check(Order("个人").Last() == entries[0].Id && Order("工作").SequenceEqual(work), "independent end-of-page drop");
+        Layout.OrderInTag(library, "工作", entries[3], entries[3], after: true);
+        Check(Order("工作").SequenceEqual(work), "self-drop is a no-op");
+        var outsider = WindowsCatalog.FromUrl("https://outside.example.com");
+        library.Entries.Add(outsider);
+        Check(!Layout.CanOrderInTag(library, "工作", outsider, entries[0]), "untagged items cannot enter by an ordering operation");
+        Layout.AssignTag(library, outsider, "工作");
+        Check(Order("工作").Last() == outsider.Id, "newly associated item appends to its tag");
+        Layout.UnassignTag(library, entries[1], "工作");
+        Layout.AssignTag(library, entries[1], "工作");
+        Check(Order("工作").Last() == entries[1].Id && !Order("工作").SequenceEqual(Order("个人")), "reassociated item appends without changing other tags");
+        var store = new LibraryStore(folder);
+        store.Save(library);
+        var savedOrder = Order("工作");
+        library = store.Load(out _);
+        Check(Order("工作").SequenceEqual(savedOrder) && library.Entries.Select(entry => entry.Id).Take(global.Length).SequenceEqual(global),
+            "independent orders survive save and restart");
+        var backup = Path.Combine(folder, "export.json");
+        store.Export(backup, library);
+        library = LibraryStore.Read(backup);
+        Check(Order("工作").SequenceEqual(savedOrder) && LibraryStore.Copy(library).TagOrders.Comparer.Equals(StringComparer.OrdinalIgnoreCase),
+            "export, import and transactional copies preserve independent tag orders");
+        var restored = library.Entries.Single(entry => entry.Id == entries[2].Id);
+        Layout.Remove(library, restored);
+        Check(library.TagOrders.Values.All(order => !order.Contains(restored.Id)), "remove stale entry positions");
+        Layout.RemoveTag(library, "工作");
+        library.Tags.Add("工作");
+        Check(!library.TagOrders.ContainsKey("工作"), "deleted tag order cannot leak into a recreated tag");
+
+        var legacy = new Library { Tags = ["旧标签"], Entries = [WindowsCatalog.FromUrl("https://example.com/a"), WindowsCatalog.FromUrl("https://example.com/b")] };
+        foreach (var entry in legacy.Entries) entry.Tags.Add("旧标签");
+        store.Save(legacy);
+        library = store.Load(out _);
+        var original = Order("旧标签");
+        Layout.Move(library, library.Entries[1], library.Entries[0], DropAction.Before);
+        Check(Order("旧标签").SequenceEqual(original), "legacy configuration upgrades without coupling future global sorting");
+        library.TagOrders["旧标签"] = [Guid.NewGuid(), original[1], original[1]];
+        store.Save(library);
+        library = store.Load(out _);
+        Check(Order("旧标签").SequenceEqual(new[] { original[1], original[0] }), "repair missing, duplicate and stale tag positions");
     }
 
     private static void Check(bool passed, string label)

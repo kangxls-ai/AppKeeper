@@ -47,7 +47,7 @@ public partial class MainWindow : Window
     private bool firstReveal = true;
     private bool nativeSizing;
     private string Query => SearchBox.Text.Trim();
-    private bool CanArrangeEntries => selectedTag == null && Query.Length == 0;
+    private bool CanArrangeEntries => Query.Length == 0;
 
     internal MainWindow(App app)
     {
@@ -172,7 +172,8 @@ public partial class MainWindow : Window
     {
         if (!ready)
             return;
-        StatusText.Text = app.Status.Length > 0 ? app.Status : "拖到图标边缘排序，拖到中央分组";
+        StatusText.Text = app.Status.Length > 0 ? app.Status : selectedTag != null
+            ? "拖动调整当前标签顺序，与全部和其他标签互不影响" : "拖到图标边缘排序，拖到中央分组";
     }
 
     internal void RefreshData()
@@ -248,7 +249,7 @@ public partial class MainWindow : Window
 
         EnableButtonDrag(tile, () => new DataObject(DragFormat, entry.Id.ToString()),
             DragDropEffects.Move | DragDropEffects.Link);
-        if (CanArrangeEntries)
+        if (CanArrangeEntries && (selectedTag == null || !insideFolder))
         {
             tile.AllowDrop = true;
             tile.DragOver += (_, e) =>
@@ -256,7 +257,7 @@ public partial class MainWindow : Window
                 if (Dragged(e) is not { } source)
                     return;
                 var action = DropPosition(tile, e, source, entry, insideFolder);
-                var canMove = Layout.CanMove(source, entry, action);
+                var canMove = selectedTag != null ? Layout.CanOrderInTag(app.Data, selectedTag, source, entry) : Layout.CanMove(source, entry, action);
                 tile.Background = canMove ? activeBrush : Brushes.Transparent;
                 e.Effects = canMove ? DragDropEffects.Move : DragDropEffects.None;
                 e.Handled = true;
@@ -268,7 +269,9 @@ public partial class MainWindow : Window
                 if (Dragged(e) is not { } source)
                     return;
                 var action = DropPosition(tile, e, source, entry, insideFolder);
-                if (Layout.CanMove(source, entry, action))
+                if (selectedTag is { } tag)
+                    app.Commit(library => Layout.OrderInTag(library, tag, source, entry, action == DropAction.After));
+                else if (Layout.CanMove(source, entry, action))
                     app.Commit(library => Layout.Move(library, source, entry, action));
                 e.Handled = true;
             };
@@ -343,7 +346,7 @@ public partial class MainWindow : Window
                 if (item.IsChecked)
                     Layout.AssignTag(library, entry, tag);
                 else
-                    entry.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
+                    Layout.UnassignTag(library, entry, tag);
             });
             tags.Items.Add(item);
         }
@@ -442,9 +445,10 @@ public partial class MainWindow : Window
         FolderTiles.Children.Clear();
     }
 
-    private static DropAction DropPosition(Button tile, DragEventArgs e, Entry source, Entry target, bool insideFolder)
+    private DropAction DropPosition(Button tile, DragEventArgs e, Entry source, Entry target, bool insideFolder)
     {
         var x = e.GetPosition(tile).X / Math.Max(1, tile.ActualWidth);
+        if (selectedTag != null) return x < .5 ? DropAction.Before : DropAction.After;
         return Layout.DropAt(source, target, x, insideFolder);
     }
 
@@ -487,7 +491,7 @@ public partial class MainWindow : Window
             else
                 edgeTimer.Stop();
 
-            var canMove = !inbox || source.Kind != EntryKind.Group;
+            var canMove = selectedTag is { } tag ? Layout.CanOrderInTag(app.Data, tag, source, null) : !inbox || source.Kind != EntryKind.Group;
             e.Effects = canMove ? DragDropEffects.Move : DragDropEffects.None;
         }
         else
@@ -506,8 +510,13 @@ public partial class MainWindow : Window
         {
             app.Commit(library =>
             {
-                Layout.MoveHome(library, entry);
-                entry.Inbox = inbox;
+                if (selectedTag is { } tag)
+                    Layout.OrderInTag(library, tag, entry, null, after: true);
+                else
+                {
+                    Layout.MoveHome(library, entry);
+                    entry.Inbox = inbox;
+                }
             });
         }
         else if (e.Data.GetData(DataFormats.FileDrop) is string[] files)

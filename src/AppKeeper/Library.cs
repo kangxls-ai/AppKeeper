@@ -33,6 +33,7 @@ internal sealed class Library
     public int Key { get; set; } = 32;
     public List<string> Tags { get; set; } = [];
     public BallPosition? Ball { get; set; }
+    public Dictionary<string, List<Guid>> TagOrders { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public LauncherSize? WindowSize { get; set; }
     public List<string> SearchHistory { get; set; } = [];
     public List<Guid> RecentEntries { get; set; } = [];
@@ -159,6 +160,7 @@ internal sealed class LibraryStore(string directory)
             .Distinct(StringComparer.OrdinalIgnoreCase).Take(QuickHistory.SearchLimit).ToList();
         data.RecentEntries = (data.RecentEntries ?? []).Where(ids.Contains).Distinct().Take(QuickHistory.EntryLimit).ToList();
         data.PinnedEntries = (data.PinnedEntries ?? []).Where(ids.Contains).Distinct().Take(QuickHistory.EntryLimit).ToList();
+        Layout.EnsureTagOrders(data);
         return data;
     }
 
@@ -166,6 +168,7 @@ internal sealed class LibraryStore(string directory)
     {
         var copy = JsonSerializer.Deserialize<Library>(JsonSerializer.SerializeToUtf8Bytes(data, Json), Json)!;
         copy.Ignored = new(copy.Ignored, StringComparer.OrdinalIgnoreCase);
+        copy.TagOrders = new(copy.TagOrders ?? [], StringComparer.OrdinalIgnoreCase);
         return copy;
     }
 }
