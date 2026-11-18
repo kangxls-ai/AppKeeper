@@ -91,9 +91,10 @@ internal static class SelfTest
             CheckSearchViewport();
             CheckTagOrganization(directory);
             CheckQuickHistory(directory);
+            RecentUsageSelfTest.Run(directory);
             CheckPortableMigration(directory);
             System.Threading.Tasks.Task.Run(() => ModuleSelfTest.Run(directory)).GetAwaiter().GetResult();
-            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · tags and history · Pigeon transfer, MarkDo and Store migration");
+            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · tags, recent usage ranking and Windows shortcut observations · Pigeon transfer, MarkDo and Store migration");
             return 0;
         }
         catch (Exception error)
@@ -117,6 +118,13 @@ internal static class SelfTest
             return 1;
         var localState = Path.GetDirectoryName(profile.DataDirectory)!;
         Directory.CreateDirectory(localState);
+        var previousLog = Environment.GetEnvironmentVariable("APPKEEPER_SELFTEST_LOG");
+        try
+        {
+            Environment.SetEnvironmentVariable("APPKEEPER_SELFTEST_LOG", Path.Combine(localState, "package-self-test.txt"));
+            if (Run() != 0) return 1;
+        }
+        finally { Environment.SetEnvironmentVariable("APPKEEPER_SELFTEST_LOG", previousLog); }
         File.WriteAllText(Path.Combine(localState, "package-smoke.txt"), profile.Name + "\n" + profile.DataDirectory);
         return 0;
     }
@@ -135,6 +143,9 @@ internal static class SelfTest
         library.Entries.Add(entry);
         library.PinnedEntries.Add(entry.Id);
         new LibraryStore(source).Save(library);
+        var recentStore = new RecentUsageStore(source);
+        recentStore.Observe([new(Path.Combine(source, "recent.txt"), false, DateTimeOffset.UtcNow, false, "历史导入")], DateTimeOffset.UtcNow);
+        recentStore.Exclude(Path.Combine(source, "private"));
         var original = new AgendaStore(source);
         using var holdWal = Sqlite.Open(original.PathName);
         _ = holdWal.Rows("PRAGMA journal_mode=WAL").ToArray();
@@ -156,6 +167,9 @@ internal static class SelfTest
 
         PortableMigration.Run(source, packaged.DataDirectory);
         var migrated = new LibraryStore(packaged.DataDirectory).Load(out _);
+        var migratedRecent = new RecentUsageStore(packaged.DataDirectory).Snapshot();
+        Check(migratedRecent.Items.Count == 1 && migratedRecent.Excluded.SequenceEqual(recentStore.Snapshot().Excluded),
+            "migrate recent usage and exclusion preferences to Store data");
         Check(migrated.Tags.SequenceEqual(library.Tags) && migrated.PinnedEntries.SequenceEqual([entry.Id]) &&
             migrated.SearchHistory.SequenceEqual(library.SearchHistory) && migrated.WindowSize == library.WindowSize &&
             !migrated.StartWithWindows,

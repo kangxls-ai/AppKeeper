@@ -39,6 +39,7 @@
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <StackPanel x:Name="PageRail" Margin="0,10,6,0">
                     <Button x:Name="AppsTab" Content="快捷应用" Click="OpenAppsPage" Padding="7,8" Margin="0,0,0,5"/>
+                    <Button x:Name="RecentTab" Content="最近访问" Click="OpenRecentPage" Padding="7,8" Margin="0,0,0,5"/>
                     <Button x:Name="PigeonTab" Content="飞鸽传书" Click="OpenPigeonPage" Padding="7,8" Margin="0,0,0,5"/>
                     <Button x:Name="AgendaTab" Content="日程管理" Click="OpenAgendaPage" Padding="7,8"/>
                 </StackPanel>

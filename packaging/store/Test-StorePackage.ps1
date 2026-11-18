@@ -62,14 +62,19 @@ public static class StoreActivation
     $processId = [StoreActivation]::Run($appId)
     $localState = Join-Path $env:LOCALAPPDATA "Packages\$($installed.PackageFamilyName)\LocalState"
     $report = Join-Path $localState 'package-smoke.txt'
-    $deadline = (Get-Date).AddSeconds(35)
+    $deadline = (Get-Date).AddSeconds(120)
     while (!(Test-Path -LiteralPath $report) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
-    if (!(Test-Path -LiteralPath $report)) { throw "Packaged process $processId did not write its smoke report." }
+    if (!(Test-Path -LiteralPath $report)) {
+        $selfTest = Join-Path $localState 'package-self-test.txt'
+        if (Test-Path -LiteralPath $selfTest) { Get-Content -LiteralPath $selfTest -Encoding utf8 }
+        throw "Packaged process $processId did not write its smoke report."
+    }
     $lines = Get-Content -LiteralPath $report -Encoding utf8
     if ($lines[0] -ne 'EasyAppKeeper' -or $lines[1] -ne (Join-Path $localState 'Data')) {
         throw 'Packaged process selected the wrong product name or data path.'
     }
     Write-Output "PASS - registered $appId and activated it with writable LocalState"
+    Get-Content -LiteralPath (Join-Path $localState 'package-self-test.txt') -Encoding utf8
 }
 finally {
     if ($installed) { Remove-AppxPackage -Package $installed.PackageFullName }

@@ -25,6 +25,14 @@ internal static class PortableMigration
         try
         {
             new LibraryStore(stage).Save(data);
+            var recent = Path.Combine(source, "AppKeeper.recent.json");
+            if (File.Exists(recent) || File.Exists(recent + ".bak"))
+            {
+                // Validate before copying, and recover an existing valid backup when needed.
+                _ = new RecentUsageStore(source).Snapshot();
+                if (File.Exists(recent)) File.Copy(recent, Path.Combine(stage, "AppKeeper.recent.json"));
+                if (File.Exists(recent + ".bak")) File.Copy(recent + ".bak", Path.Combine(stage, "AppKeeper.recent.json.bak"));
+            }
             MigrateAgenda(source, stage);
             MigratePigeon(source, stage, destination);
             Directory.Move(stage, destination);

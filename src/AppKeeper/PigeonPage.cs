@@ -267,6 +267,7 @@ internal sealed class PigeonPage : UserControl
         if (!File.Exists(path))
             throw new FileNotFoundException("找不到此文件，可能已移动或删除。");
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        ((App)Application.Current).RecordRecentOpen(path, false);
     }
 
     private static void RevealFile(string path)
@@ -282,6 +283,7 @@ internal sealed class PigeonPage : UserControl
         if (path == null || !Directory.Exists(path))
             throw new DirectoryNotFoundException("找不到此文件夹，可能已移动或删除。");
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        ((App)Application.Current).RecordRecentOpen(path, true);
     }
 
     private static string FormatSize(long bytes) => bytes >= 1_000_000_000 ? $"{bytes / 1e9:F2} GB" :

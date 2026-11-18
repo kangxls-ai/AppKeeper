@@ -27,6 +27,7 @@ public partial class App : Application
     private DispatcherTimer? reminderTimer;
     private PigeonService? pigeon;
     private AgendaStore? agenda;
+    private RecentUsageService? recentUsage;
     private string moduleWarning = "";
     private DateTimeOffset previousReminderCheck = DateTimeOffset.Now;
     private MainWindow? launcher;
@@ -45,6 +46,7 @@ public partial class App : Application
     internal bool IsStoreEdition => profile.IsStore;
     internal PigeonService Pigeon => pigeon ??= new PigeonService(profile.DataDirectory);
     internal AgendaStore Agenda => agenda ??= new AgendaStore(profile.DataDirectory);
+    internal RecentUsageService RecentUsage => recentUsage ??= new RecentUsageService(profile.DataDirectory);
     internal string Status => string.Join("　", new[] { notice, scanNotice, hotkeyNotice }.Where(text => text.Length > 0));
 
     protected override void OnStartup(StartupEventArgs e)
@@ -109,6 +111,8 @@ public partial class App : Application
         CreateTray();
         if (writable)
         {
+            try { _ = RecentUsage; }
+            catch (Exception error) { moduleWarning = "最近访问初始化失败：" + error.Message; }
             try { _ = Pigeon; }
             catch (Exception error) { moduleWarning = "飞鸽传书初始化失败：" + error.Message; }
             reminderTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
@@ -190,6 +194,13 @@ public partial class App : Application
         catch (Exception error) { System.Diagnostics.Trace.TraceWarning(error.Message); }
     }
     private void ShowLauncher() => GetLauncher().Reveal();
+    internal void RecordRecentOpen(string path, bool folder)
+    {
+        if (recentUsage == null) return;
+        try { recentUsage.RecordOpen(path, folder); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { System.Diagnostics.Trace.TraceWarning("最近访问记录保存失败：" + error.Message); }
+    }
     private void ShowHomeFromBall() => GetLauncher().RevealHome();
     private void DisplaySettingsChanged(object? sender, EventArgs args) =>
         Dispatcher.BeginInvoke(() => ball?.Place(data.Ball));
@@ -410,6 +421,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         reminderTimer?.Stop();
+        recentUsage?.Dispose();
         pigeon?.Dispose();
         SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
         scanTimer?.Stop();

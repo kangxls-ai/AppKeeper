@@ -43,6 +43,7 @@ public partial class MainWindow : Window
     private string? draggedTag;
     private PigeonPage? pigeonPage;
     private AgendaPage? agendaPage;
+    private RecentUsagePage? recentUsagePage;
     private bool firstReveal = true;
     private bool nativeSizing;
     private string Query => SearchBox.Text.Trim();
@@ -405,6 +406,8 @@ public partial class MainWindow : Window
         try
         {
             WindowsCatalog.Launch(entry);
+            if (entry.Kind is EntryKind.File or EntryKind.Directory)
+                app.RecordRecentOpen(entry.Target, entry.Kind == EntryKind.Directory);
             SaveQuickHistory(entry.Id);
             Conceal();
         }
@@ -878,6 +881,8 @@ public partial class MainWindow : Window
     }
 
     private void OpenAppsPage(object sender, RoutedEventArgs e) => ShowModule(null, AppsTab);
+    private void OpenRecentPage(object sender, RoutedEventArgs e) =>
+        OpenModule(() => recentUsagePage ??= new RecentUsagePage(app.RecentUsage), RecentTab);
     private void OpenPigeonPage(object sender, RoutedEventArgs e) =>
         OpenModule(() => pigeonPage ??= new PigeonPage(app.Pigeon), PigeonTab);
     private void OpenAgendaPage(object sender, RoutedEventArgs e) =>
@@ -898,7 +903,7 @@ public partial class MainWindow : Window
         AllowDrop = view == null;
         ModuleHost.Content = view;
         ModuleHost.Visibility = view == null ? Visibility.Collapsed : Visibility.Visible;
-        foreach (var button in new[] { AppsTab, PigeonTab, AgendaTab })
+        foreach (var button in new[] { AppsTab, RecentTab, PigeonTab, AgendaTab })
             button.Background = button == selected ? activeBrush : Brushes.Transparent;
     }
 
