@@ -895,7 +895,7 @@ public partial class MainWindow : Window
     private void OpenPigeonPage(object sender, RoutedEventArgs e) =>
         OpenModule(() => pigeonPage ??= new PigeonPage(app.Pigeon), PigeonTab);
     private void OpenAgendaPage(object sender, RoutedEventArgs e) =>
-        OpenModule(() => agendaPage ??= new AgendaPage(app.Agenda), AgendaTab);
+        OpenModule(() => agendaPage ??= new AgendaPage(app.Agenda, app.AgendaSync), AgendaTab);
 
     private void OpenModule(Func<FrameworkElement> create, Button button)
     {

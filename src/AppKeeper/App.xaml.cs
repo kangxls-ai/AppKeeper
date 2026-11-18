@@ -27,6 +27,7 @@ public partial class App : Application
     private DispatcherTimer? reminderTimer;
     private PigeonService? pigeon;
     private AgendaStore? agenda;
+    private AgendaLanSync? agendaSync;
     private RecentUsageService? recentUsage;
     private string moduleWarning = "";
     private DateTimeOffset previousReminderCheck = DateTimeOffset.Now;
@@ -46,6 +47,7 @@ public partial class App : Application
     internal bool IsStoreEdition => profile.IsStore;
     internal PigeonService Pigeon => pigeon ??= new PigeonService(profile.DataDirectory);
     internal AgendaStore Agenda => agenda ??= new AgendaStore(profile.DataDirectory);
+    internal AgendaLanSync AgendaSync => agendaSync ??= new AgendaLanSync(Agenda, profile.DataDirectory);
     internal RecentUsageService RecentUsage => recentUsage ??= new RecentUsageService(profile.DataDirectory);
     internal string Status => string.Join("　", new[] { notice, scanNotice, hotkeyNotice }.Where(text => text.Length > 0));
 
@@ -111,6 +113,7 @@ public partial class App : Application
         CreateTray();
         if (writable)
         {
+            _ = StartAgendaSync();
             try { _ = RecentUsage; }
             catch (Exception error) { moduleWarning = "最近访问初始化失败：" + error.Message; }
             try { _ = Pigeon; }
@@ -170,6 +173,15 @@ public partial class App : Application
     }
 
     private MainWindow GetLauncher() => launcher ??= new MainWindow(this);
+
+    private async Task StartAgendaSync()
+    {
+        try { await AgendaSync.StartAsync(); }
+        catch (Exception error)
+        {
+            System.Diagnostics.Trace.TraceWarning("手机同步服务未启动：" + error.Message);
+        }
+    }
 
     private void CheckAgendaReminders()
     {
@@ -421,6 +433,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         reminderTimer?.Stop();
+        agendaSync?.Dispose();
         recentUsage?.Dispose();
         pigeon?.Dispose();
         SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;

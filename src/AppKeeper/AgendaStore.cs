@@ -28,11 +28,13 @@ internal sealed class AgendaSettings
 
 internal sealed class AgendaStore
 {
+    private readonly object gate = new();
     private readonly string settingsFile;
     private readonly string defaultPath;
     private AgendaSettings settings;
     public string PathName => settings.Path ?? defaultPath;
     public bool Reminders => settings.Reminders;
+    internal string DeviceId => settings.Device;
     public string? FindOriginal()
     {
         var support = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
@@ -61,7 +63,8 @@ internal sealed class AgendaStore
         }
     }
 
-    public void Connect(string? path)
+    public void Connect(string? path) { lock (gate) ConnectCore(path); }
+    private void ConnectCore(string? path)
     {
         if (path != null)
         {
@@ -79,14 +82,16 @@ internal sealed class AgendaStore
         settings = next;
     }
 
-    public void SetReminders(bool enabled)
+    public void SetReminders(bool enabled) { lock (gate) SetRemindersCore(enabled); }
+    private void SetRemindersCore(bool enabled)
     {
         var next = new AgendaSettings { Path = settings.Path, Device = settings.Device, Reminders = enabled };
         ModuleFiles.Write(settingsFile, next);
         settings = next;
     }
 
-    public AgendaTask[] Tasks()
+    public AgendaTask[] Tasks() { lock (gate) return TasksCore(); }
+    private AgendaTask[] TasksCore()
     {
         using var sql = Sqlite.Open(PathName);
         var tasks = new Dictionary<string, AgendaTask>();
@@ -115,11 +120,11 @@ internal sealed class AgendaStore
                         Actual = p.TryGetProperty("actualStartedAt", out _) ? Date(p, "actualStartedAt") : t.Actual
                     },
                     "start" => t with { Actual = Date(p, "actualStartedAt") },
-                    "complete" => t with { Completed = Date(p, "completedAt"), Seconds = Int(p, "effortSeconds"),
+                    "complete" => t with { Deleted = false, Completed = Date(p, "completedAt"), Seconds = Int(p, "effortSeconds"),
                         Rating = Int(p, "rating"), Note = Str(p, "note") ?? "" },
                     "feedback" => t with { Seconds = Int(p, "effortSeconds") ?? t.Seconds,
                         Rating = Int(p, "rating"), Note = Str(p, "note") ?? "" },
-                    "reopen" => t with { Completed = null },
+                    "reopen" => t with { Deleted = false, Completed = null },
                     "delete" => t with { Deleted = true },
                     _ => t
                 };
@@ -132,7 +137,8 @@ internal sealed class AgendaStore
         sql.Rows("SELECT task_id,kind,payload,created_at FROM operations ORDER BY clock,device_id,id")
             .Select(row => (row[0], row[1], row[2], row[3]));
 
-    internal void Append(string kind, string id, object payload)
+    internal void Append(string kind, string id, object payload) { lock (gate) AppendCore(kind, id, payload); }
+    private void AppendCore(string kind, string id, object payload)
     {
         using var sql = Sqlite.Open(PathName);
         sql.Execute("BEGIN IMMEDIATE");
@@ -147,6 +153,48 @@ internal sealed class AgendaStore
     }
 
     internal static string? Iso(DateTimeOffset? date) => date?.UtcDateTime.ToString("O");
+
+    internal AgendaOperation[] Operations()
+    {
+        lock (gate) { using var sql = Sqlite.Open(PathName); return Operations(sql); }
+    }
+
+    private static AgendaOperation[] Operations(Sqlite sql) =>
+        sql.Rows("SELECT id,device_id,clock,kind,task_id,payload,created_at FROM operations ORDER BY clock,device_id,id")
+            .Select(row => new AgendaOperation(row[0], row[1], long.Parse(row[2], System.Globalization.CultureInfo.InvariantCulture), row[3], row[4],
+                JsonSerializer.Deserialize<JsonElement>(row[5]), row[6])).ToArray();
+
+    internal string MergeAndRead(AgendaOperation[] incoming, Func<AgendaOperation[], string> reply)
+    {
+        if (incoming.Length > 50000) throw new InvalidDataException("同步操作过多。");
+        foreach (var operation in incoming) operation.Validate();
+        lock (gate)
+        {
+            using var sql = Sqlite.Open(PathName);
+            sql.Execute("BEGIN IMMEDIATE");
+            try
+            {
+                var known = Operations(sql).ToDictionary(operation => operation.Id);
+                foreach (var operation in incoming)
+                {
+                    if (known.TryGetValue(operation.Id, out var previous))
+                    {
+                        if (!operation.SameAs(previous)) throw new InvalidDataException("重复操作的内容不一致。");
+                        continue;
+                    }
+                    sql.Execute("INSERT INTO operations (id,device_id,clock,kind,task_id,payload,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                        operation.Id, operation.DeviceId, operation.Clock.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        operation.Kind, operation.TaskId, operation.Payload.GetRawText(), operation.CreatedAt);
+                    known.Add(operation.Id, operation);
+                }
+                // Build and size-check the encrypted response before committing the batch.
+                var result = reply(Operations(sql));
+                sql.Execute("COMMIT");
+                return result;
+            }
+            catch { sql.Execute("ROLLBACK"); throw; }
+        }
+    }
     private static string? Str(JsonElement value, string name) =>
         value.TryGetProperty(name, out var item) && item.ValueKind == JsonValueKind.String ? item.GetString() : null;
     private static DateTimeOffset? Date(JsonElement value, string name) =>

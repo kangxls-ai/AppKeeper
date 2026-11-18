@@ -4,7 +4,7 @@
 
 ## 构建与上传
 
-1. 在 GitHub Actions 的成功运行中下载 `EasyAppKeeper-store-x64`，解压其中的 `EasyAppKeeper_1.2.1.0_x64.msix`。也可以用 .NET 10 SDK 和 Windows SDK 运行 `./packaging/store/Build-StorePackage.ps1`。
+1. 在 GitHub Actions 的成功运行中下载 `EasyAppKeeper-store-x64`，解压其中的 `EasyAppKeeper_1.3.0.0_x64.msix`。也可以用 .NET 10 SDK 和 Windows SDK 运行 `./packaging/store/Build-StorePackage.ps1`。
 2. 在 Partner Center 进入 EasyAppKeeper 的提交草稿并将 MSIX 上传到「程序包」。交付的文件是商店上传包，由 Microsoft Store 认证后签名。Actions 只对临时测试副本签名。
 3. 在「定价和可用性」设为免费，选择中国市场。在「商店列表」选择简体中文。补充实际截图、年龄分级问卷和隐私政策链接。
 4. 确认隐私政策和反馈页面从目标地区可访问后，先提交私有受众试装。试装时检查安装、升级、快捷键、启动任务以及两台电脑之间的飞鸽传书。
@@ -23,5 +23,5 @@
 - 首次运行无需 EasyAppKeeper 账户。按 Alt+Space 呼出窗口，输入应用名或拼音。快捷键被占用时，可以通过托盘打开设置并改键。
 - 点击「飞鸽传书」可在两台运行本应用的 Windows 电脑之间，用局域网发现或手动 IPv4 配对，再发送文字或文件。接收文件由用户确认，除非为该配对单独开启自动接收。
 - 点击「最近访问」可查看本机系统最近文件及运行期间识别到的文件夹访问。首次历史不计次，七天排行从启用后可识别的新访问累计。管理页可暂停、隐藏、排除和清空本应用记录，不修改 Windows 历史或设置。MSIX 与 EXE 使用同一采集与排行实现。
-- 点击「日程管理」可在本地创建待办并导出 Markdown。Android 同步由独立的原版 MarkDo 提供。
+- 点击「日程管理」可在本地创建待办并导出 Markdown。「连接手机」直接为原 MarkDo Android 手机端（例如 0.5.2，协议 v4）提供扫码加六位确认码或 IP、端口、确认码手动配对，以及局域网双向同步；无需独立的 Windows MarkDo。默认 TCP 8787，支持修改、停用和撤销手机。无需账户，本次不导入旧 MarkDo 的历史任务及旧配对资料。
 - 包声明 `runFullTrust`，用于读取 Windows 应用入口、经用户点击启动应用和文件、系统全局快捷键、通知区图标及局域网通信。应用在用户权限下运行。

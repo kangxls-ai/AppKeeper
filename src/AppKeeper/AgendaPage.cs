@@ -13,6 +13,8 @@ namespace AppKeeper;
 internal sealed class AgendaPage : UserControl
 {
     private readonly AgendaStore store;
+    private readonly AgendaLanSync sync;
+    private AgendaSyncPanel? syncPanel;
     private readonly StackPanel content = new();
     private readonly TextBox quick = ModuleUi.Input();
     private readonly StackPanel footer = new();
@@ -23,15 +25,16 @@ internal sealed class AgendaPage : UserControl
     private DateTime month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private int page;
 
-    internal AgendaPage(AgendaStore store)
+    internal AgendaPage(AgendaStore store, AgendaLanSync sync)
     {
         this.store = store;
+        this.sync = sync;
         var layout = new DockPanel();
         var header = new StackPanel { Margin = new(0, 0, 0, 5) };
         DockPanel.SetDock(header, Dock.Top);
         header.Children.Add(ModuleUi.Text("日程管理", true, 19));
         var navigation = new WrapPanel();
-        tabs = new[] { "待办", "日历", "已完成", "设置" }.Select((label, index) => ModuleUi.Button(label, () =>
+        tabs = new[] { "待办", "日历", "已完成", "连接手机", "设置" }.Select((label, index) => ModuleUi.Button(label, () =>
         {
             page = index;
             Render();
@@ -77,7 +80,7 @@ internal sealed class AgendaPage : UserControl
         {
             content.Children.Clear();
             content.Children.Add(ModuleUi.Text(error.Message));
-            content.Children.Add(ModuleUi.Button("日程设置", () => { page = 3; Render(); }));
+            content.Children.Add(ModuleUi.Button("日程设置", () => { page = 4; Render(); }));
         }
     }
 
@@ -87,7 +90,8 @@ internal sealed class AgendaPage : UserControl
         for (var i = 0; i < tabs.Length; i++)
             tabs[i].Background = i == page ? ModuleUi.Accent : System.Windows.Media.Brushes.Transparent;
         footer.Visibility = page == 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (page == 3) ShowSettings();
+        if (page == 4) ShowSettings();
+        else if (page == 3) content.Children.Add(syncPanel ??= new AgendaSyncPanel(sync));
         else if (page == 1) ShowCalendar();
         else if (page == 2)
         {
@@ -318,7 +322,8 @@ internal sealed class AgendaPage : UserControl
             try { store.Connect(null); Refresh(force: true); }
             catch (Exception error) { ModuleUi.Error(this, error); }
         }));
-        content.Children.Add(ModuleUi.Text("Android 局域网同步由原版 MarkDo 提供。使用同一台电脑上的现有 MarkDo 数据库时，AppKeeper 会读取其中的同步结果。", size: 12));
+        content.Children.Add(ModuleUi.Button("连接 MarkDo 手机端", () => { page = 3; Render(); }));
+        content.Children.Add(ModuleUi.Text("AppKeeper 直接提供手机配对与局域网同步服务，无需同时运行原版 Windows MarkDo。", size: 12));
         var reminders = new CheckBox { IsChecked = store.Reminders, Content = "启用开始和截止提醒", Foreground = System.Windows.Media.Brushes.White };
         reminders.Click += (_, _) =>
         {

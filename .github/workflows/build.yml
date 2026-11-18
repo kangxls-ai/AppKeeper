@@ -36,6 +36,11 @@ jobs:
           if (Test-Path $env:APPKEEPER_SELFTEST_LOG) { Get-Content $env:APPKEEPER_SELFTEST_LOG }
           if ($test.ExitCode -ne 0) { exit $test.ExitCode }
           if (!(Test-Path $env:APPKEEPER_SELFTEST_LOG)) { throw 'Self-test did not produce a result' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify original MarkDo protocol with independent Node OpenSSL client
+        run: node tests/markdo-interop.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: AppKeeper-win-x64

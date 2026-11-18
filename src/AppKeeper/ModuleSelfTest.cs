@@ -14,6 +14,7 @@ internal static class ModuleSelfTest
     {
         VerifyAgenda(root);
         await VerifyPigeon(root);
+        await AgendaSyncSelfTest.Run(root);
     }
 
     private static void VerifyAgenda(string root)
