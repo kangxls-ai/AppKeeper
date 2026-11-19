@@ -4,7 +4,7 @@
 
 ## 构建与上传
 
-1. 在 GitHub Actions 的成功运行中下载 `EasyAppKeeper-store-x64`，解压其中的 `EasyAppKeeper_1.3.0.0_x64.msix`。也可以用 .NET 10 SDK 和 Windows SDK 运行 `./packaging/store/Build-StorePackage.ps1`。
+1. 在 GitHub Actions 的成功运行中下载 `EasyAppKeeper-store-x64`，解压其中的 `EasyAppKeeper_1.3.1.0_x64.msix`。也可以用 .NET 10 SDK 和 Windows SDK 运行 `./packaging/store/Build-StorePackage.ps1`。
 2. 在 Partner Center 进入 EasyAppKeeper 的提交草稿并将 MSIX 上传到「程序包」。交付的文件是商店上传包，由 Microsoft Store 认证后签名。Actions 只对临时测试副本签名。
 3. 在「定价和可用性」设为免费，选择中国市场。在「商店列表」选择简体中文。补充实际截图、年龄分级问卷和隐私政策链接。
 4. 确认隐私政策和反馈页面从目标地区可访问后，先提交私有受众试装。试装时检查安装、升级、快捷键、启动任务以及两台电脑之间的飞鸽传书。

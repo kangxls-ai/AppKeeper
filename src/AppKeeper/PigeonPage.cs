@@ -1,9 +1,11 @@
 using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Automation;
@@ -36,6 +38,10 @@ internal sealed class PigeonPage : UserControl
     private bool choosing = true;
     private string listStamp = "";
     private PigeonItem[] previous = [];
+    private bool rendered;
+    private Window? host;
+    private int refreshQueued;
+    private string readNotice = "";
 
     internal PigeonPage(PigeonService service)
     {
@@ -43,7 +49,7 @@ internal sealed class PigeonPage : UserControl
         var layout = new DockPanel();
         var toolbar = new WrapPanel();
         DockPanel.SetDock(toolbar, Dock.Top);
-        back = ModuleUi.Button("‹ 电脑列表", () => { choosing = true; Fit(); });
+        back = ModuleUi.Button("‹ 电脑列表", OpenList);
         toolbar.Children.Add(back);
         toolbar.Children.Add(ModuleUi.Button("＋ 手动添加", () => Pair()));
         toolbar.Children.Add(ModuleUi.Button("传书设置", Settings));
@@ -112,10 +118,12 @@ internal sealed class PigeonPage : UserControl
         timer.Tick += (_, _) => Refresh();
         IsVisibleChanged += (_, _) =>
         {
-            if (IsVisible) { Refresh(); timer.Start(); }
-            else timer.Stop();
+            if (IsVisible) { OpenList(); timer.Start(); }
+            else { timer.Stop(); service.SetReadingPeer(null); }
         };
-        SizeChanged += (_, _) => Fit();
+        Loaded += (_, _) => { AttachHost(); Refresh(); };
+        Unloaded += (_, _) => { timer.Stop(); DetachHost(); };
+        SizeChanged += (_, _) => { Fit(); UpdateReadingContext(); };
         Fit();
     }
 
@@ -132,12 +140,74 @@ internal sealed class PigeonPage : UserControl
 
     private bool IsPaired() => service.Peers().Any(peer => peer.Key == selected && peer.State == "paired");
 
+    internal void OpenList()
+    {
+        service.SetReadingPeer(null);
+        selected = null;
+        choosing = true;
+        previous = [];
+        rendered = false;
+        readNotice = "";
+        Fit();
+        Refresh();
+    }
+
+    private void AttachHost()
+    {
+        DetachHost();
+        host = Window.GetWindow(this);
+        if (host != null)
+        {
+            host.Activated += HostChanged;
+            host.Deactivated += HostChanged;
+            host.StateChanged += HostChanged;
+        }
+        service.UnreadChanged += UnreadChanged;
+    }
+
+    private void DetachHost()
+    {
+        service.SetReadingPeer(null);
+        service.UnreadChanged -= UnreadChanged;
+        if (host == null) return;
+        host.Activated -= HostChanged;
+        host.Deactivated -= HostChanged;
+        host.StateChanged -= HostChanged;
+        host = null;
+    }
+
+    private void HostChanged(object? sender, EventArgs e)
+    {
+        if (IsVisible) Refresh(); else UpdateReadingContext();
+    }
+
+    private string? ReadingContext()
+    {
+        var window = host ?? Window.GetWindow(this);
+        return PigeonUnread.ReadingPeer(selected, IsVisible && conversation.Visibility == Visibility.Visible,
+            window?.IsActive == true, window?.WindowState == WindowState.Minimized, choosing);
+    }
+
+    private void UpdateReadingContext() => service.SetReadingPeer(readNotice.Length == 0 && IsPaired() ? ReadingContext() : null);
+
+    private void UnreadChanged()
+    {
+        if (Dispatcher.HasShutdownStarted || Interlocked.Exchange(ref refreshQueued, 1) != 0) return;
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            Interlocked.Exchange(ref refreshQueued, 0);
+            if (IsVisible) Refresh();
+        });
+    }
+
     private void Select(PigeonPeer peer)
     {
         if (peer.State == "incoming") { Pair(incoming: peer); return; }
         selected = peer.Key;
         choosing = false;
+        readNotice = "";
         previous = [];
+        rendered = false;
         messages.Children.Clear();
         Fit();
         Refresh();
@@ -146,9 +216,46 @@ internal sealed class PigeonPage : UserControl
     private void Refresh()
     {
         var peers = service.Peers();
+        var current = peers.FirstOrDefault(peer => peer.Key == selected);
+        var paired = current?.State == "paired";
+        var online = paired && service.Online(current!.Key);
+        title.Text = current?.Name ?? "选择电脑";
+        input.IsEnabled = file.IsEnabled = folder.IsEnabled = paired;
+        UpdateComposer(paired);
+        send.Content = online ? "发送" : "排队发送";
+        var items = paired ? service.History(current!.Key) : [];
+        UpdateReadingContext();
+        if (!rendered || !items.SequenceEqual(previous))
+        {
+            var follow = history.VerticalOffset >= history.ScrollableHeight - 20;
+            var oldScroll = history.VerticalOffset;
+            messages.Children.Clear();
+            foreach (var item in items) messages.Children.Add(Message(item));
+            if (current == null)
+                messages.Children.Add(new TextBlock { Text = "选择一台电脑查看消息\n打开对话后，该电脑的未读提示会消失。",
+                    TextWrapping = TextWrapping.Wrap, Foreground = Brushes.LightSteelBlue, Margin = new(8, 32, 8, 0) });
+            previous = items;
+            rendered = true;
+            Dispatcher.BeginInvoke(() => { if (follow) history.ScrollToEnd(); else history.ScrollToVerticalOffset(oldScroll); });
+        }
+        // Only mark the displayed snapshot. A message arriving between snapshot and render remains eligible for the next refresh.
+        if (paired && ReadingContext() == selected)
+        {
+            try
+            {
+                if (service.MarkRead(selected!, items.Select(item => item.Id)))
+                    previous = items.Select(item => item with { Unread = false }).ToArray();
+                readNotice = "";
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { readNotice = "未读状态保存失败，请检查程序数据目录权限或磁盘空间。"; }
+            UpdateReadingContext();
+        }
+        status.Text = readNotice.Length > 0 ? readNotice : current == null ? service.Warning : PeerState(current);
+        var unread = service.UnreadCounts();
         var nearby = service.Discovered().Where(peer => !peers.Any(known => known.Key == peer.Computer.Key))
             .OrderBy(peer => peer.Computer.Name).ToArray();
-        var stamp = selected + string.Join("|", peers.Select(peer => $"{peer.Key}{peer.State}{service.Online(peer.Key)}")
+        var stamp = selected + string.Join("|", peers.Select(peer => $"{peer.Key}{peer.State}{service.Online(peer.Key)}:{unread.GetValueOrDefault(peer.Key)}")
             .Concat(nearby.Select(peer => $"{peer.Computer.Key}{peer.Address}{peer.Computer.Port}")));
         if (stamp != listStamp)
         {
@@ -156,30 +263,44 @@ internal sealed class PigeonPage : UserControl
             list.Children.Clear();
             list.Children.Add(ModuleUi.Text("电脑", true));
             foreach (var peer in peers.OrderBy(peer => peer.Name))
-                list.Children.Add(ModuleUi.Button(peer.Name + "\n" + PeerState(peer), () => Select(peer), peer.Key == selected));
+                list.Children.Add(ComputerButton(peer, unread.GetValueOrDefault(peer.Key)));
             foreach (var peer in nearby)
                 list.Children.Add(ModuleUi.Button(peer.Computer.Name + "\n局域网发现 · 未配对", () => Pair(peer)));
             if (peers.Length + nearby.Length == 0)
                 list.Children.Add(ModuleUi.Text("暂无电脑。可手动添加。"));
         }
 
-        var current = peers.FirstOrDefault(peer => peer.Key == selected);
-        var paired = current?.State == "paired";
-        var online = paired && service.Online(current!.Key);
-        title.Text = current?.Name ?? "选择电脑";
-        status.Text = current == null ? service.Warning : PeerState(current);
-        input.IsEnabled = file.IsEnabled = folder.IsEnabled = paired;
-        UpdateComposer(paired);
-        send.Content = online ? "发送" : "排队发送";
-        var items = paired ? service.History(current!.Key) : [];
-        if (items.SequenceEqual(previous)) return;
-        var follow = history.VerticalOffset >= history.ScrollableHeight - 20;
-        var oldScroll = history.VerticalOffset;
-        messages.Children.Clear();
-        foreach (var item in items)
-            messages.Children.Add(Message(item));
-        previous = items;
-        Dispatcher.BeginInvoke(() => { if (follow) history.ScrollToEnd(); else history.ScrollToVerticalOffset(oldScroll); });
+    }
+
+    private Button ComputerButton(PigeonPeer peer, int unread)
+    {
+        var icon = new Grid { Width = 36, Height = 36, Margin = new(0, 3, 9, 3), VerticalAlignment = VerticalAlignment.Center };
+        var drawing = new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse("M2,3 L26,3 L26,20 L2,20 Z M14,20 L14,26 M7,26 L21,26"),
+            Stroke = Brushes.LightSkyBlue, StrokeThickness = 1.5, Width = 24, Height = 24,
+            Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+        };
+        icon.Children.Add(new Border { Background = ModuleUi.Accent, CornerRadius = new(9), Child = drawing });
+        var badge = new PigeonUnreadBadge { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            Margin = new(0, -5, -5, 0) };
+        badge.Update(unread);
+        icon.Children.Add(badge);
+        var row = new DockPanel();
+        DockPanel.SetDock(icon, Dock.Left);
+        row.Children.Add(icon);
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = peer.Name, FontSize = 13, FontWeight = FontWeights.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis });
+        text.Children.Add(new TextBlock { Text = PeerState(peer), FontSize = 11, Foreground = Brushes.LightSteelBlue,
+            Margin = new(0, 5, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis });
+        row.Children.Add(text);
+        var button = ModuleUi.Button("", () => Select(peer), peer.Key == selected);
+        button.Content = row;
+        button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        button.ToolTip = peer.Name + "\n" + PeerState(peer) + (unread > 0 ? $"\n{unread} 条未读消息" : "");
+        AutomationProperties.SetName(button, peer.Name + (unread > 0 ? $"，{unread} 条未读消息" : ""));
+        return button;
     }
 
     private string PeerState(PigeonPeer peer) => peer.State switch

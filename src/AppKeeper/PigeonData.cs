@@ -16,7 +16,7 @@ internal sealed record PigeonPeer(string Key, string Name, string Address, int P
 
 internal sealed record PigeonItem(Guid Id, string Peer, bool Outgoing, string Kind, string Value,
     DateTimeOffset At, string State, long Size = 0, string? Path = null, string? Digest = null,
-    long Progress = 0, bool Archived = false, DateTime? SourceModified = null, string? OriginalFolder = null)
+    long Progress = 0, bool Archived = false, DateTime? SourceModified = null, string? OriginalFolder = null, bool Unread = false)
 {
     internal string? LocalFile => Kind == "file" && (Outgoing || State == "saved") &&
         Path != null && System.IO.Path.IsPathFullyQualified(Path) ? Path : null;

@@ -45,7 +45,20 @@ public partial class App : Application
     internal Library Data => data;
     internal string ProductName => profile.Name;
     internal bool IsStoreEdition => profile.IsStore;
-    internal PigeonService Pigeon => pigeon ??= new PigeonService(profile.DataDirectory);
+    private int unreadRefreshQueued;
+    internal PigeonService Pigeon
+    {
+        get
+        {
+            if (pigeon == null)
+            {
+                pigeon = new PigeonService(profile.DataDirectory);
+                pigeon.UnreadChanged += PigeonUnreadChanged;
+            }
+            return pigeon;
+        }
+    }
+    internal int PigeonUnreadTotal => pigeon?.UnreadCounts().Values.Sum() ?? 0;
     internal AgendaStore Agenda => agenda ??= new AgendaStore(profile.DataDirectory);
     internal AgendaLanSync AgendaSync => agendaSync ??= new AgendaLanSync(Agenda, profile.DataDirectory);
     internal RecentUsageService RecentUsage => recentUsage ??= new RecentUsageService(profile.DataDirectory);
@@ -173,6 +186,16 @@ public partial class App : Application
     }
 
     private MainWindow GetLauncher() => launcher ??= new MainWindow(this);
+
+    private void PigeonUnreadChanged()
+    {
+        if (Dispatcher.HasShutdownStarted || Interlocked.Exchange(ref unreadRefreshQueued, 1) != 0) return;
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            Interlocked.Exchange(ref unreadRefreshQueued, 0);
+            launcher?.UpdatePigeonUnread();
+        });
+    }
 
     private async Task StartAgendaSync()
     {
@@ -435,7 +458,11 @@ public partial class App : Application
         reminderTimer?.Stop();
         agendaSync?.Dispose();
         recentUsage?.Dispose();
-        pigeon?.Dispose();
+        if (pigeon != null)
+        {
+            pigeon.UnreadChanged -= PigeonUnreadChanged;
+            pigeon.Dispose();
+        }
         SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
         scanTimer?.Stop();
         showWait?.Unregister(null);

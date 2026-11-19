@@ -47,8 +47,10 @@ internal sealed class PigeonService : IDisposable
     private TcpListener? listener;
     private string warning = "";
     private readonly string key;
+    private string? readingPeer;
+    internal event Action? UnreadChanged;
 
-    public PigeonService(string root)
+    public PigeonService(string root, bool startNetworking = true)
     {
         this.root = root;
         statePath = Path.Combine(root, "AppKeeper.pigeon.json");
@@ -56,9 +58,12 @@ internal sealed class PigeonService : IDisposable
         data = ModuleFiles.Read<PigeonData>(statePath);
         identity = PigeonWire.Identity(Path.Combine(root, "AppKeeper.pigeon.pfx"));
         key = PigeonWire.Fingerprint(identity);
-        StartListener();
-        _ = Task.Run(() => DiscoveryLoop(stop.Token));
-        _ = Task.Run(() => DeliveryLoop(stop.Token));
+        if (startNetworking)
+        {
+            StartListener();
+            _ = Task.Run(() => DiscoveryLoop(stop.Token));
+            _ = Task.Run(() => DeliveryLoop(stop.Token));
+        }
     }
 
     public string Warning => warning;
@@ -85,6 +90,37 @@ internal sealed class PigeonService : IDisposable
         lock (gate) return data.Items.Where(item => item.Peer == peer && !item.Archived)
             .Select(item => progress.TryGetValue(item.Id, out var count) && item.State is "queued" or "receiving"
                 ? item with { Progress = count } : item).ToArray();
+    }
+
+    internal Dictionary<string, int> UnreadCounts()
+    {
+        lock (gate) return PigeonUnread.Counts(data);
+    }
+
+    // This foreground context is intentionally transient. A restart never reads existing messages implicitly.
+    internal void SetReadingPeer(string? peer)
+    {
+        lock (gate) readingPeer = peer != null && data.Peers.Any(item => item.Key == peer && item.State == "paired") ? peer : null;
+    }
+
+    internal bool MarkRead(string peer, IEnumerable<Guid> displayed)
+    {
+        var ids = displayed.ToHashSet();
+        lock (gate)
+        {
+            if (!data.Items.Any(item => item.Peer == peer && item.Unread && PigeonUnread.Incoming(item) && ids.Contains(item.Id)))
+                return false;
+            Edit(next =>
+            {
+                for (var i = 0; i < next.Items.Count; i++)
+                {
+                    var item = next.Items[i];
+                    if (item.Peer == peer && item.Unread && PigeonUnread.Incoming(item) && ids.Contains(item.Id))
+                        next.Items[i] = item with { Unread = false };
+                }
+            });
+            return true;
+        }
     }
 
     private string SharePath() => Path.GetFullPath(data.Share, root);
@@ -263,7 +299,7 @@ internal sealed class PigeonService : IDisposable
                     removed.Add(item);
                 }
                 else
-                    d.Items[i] = item with { Archived = true, Value = "", Path = null };
+                    d.Items[i] = item with { Archived = true, Value = "", Path = null, Unread = false };
             }
         });
         foreach (var item in removed)
@@ -278,8 +314,10 @@ internal sealed class PigeonService : IDisposable
 
     private void Edit(Action<PigeonData> action)
     {
+        bool changed;
         lock (gate)
         {
+            var previousUnread = PigeonUnread.Counts(data);
             var snapshot = new PigeonData { Port = data.Port, Share = data.Share,
                 AutoLimit = data.AutoLimit, Peers = [..data.Peers], Items = [..data.Items] };
             action(snapshot);
@@ -289,6 +327,13 @@ internal sealed class PigeonService : IDisposable
             data.AutoLimit = snapshot.AutoLimit;
             data.Peers = snapshot.Peers;
             data.Items = snapshot.Items;
+            var currentUnread = PigeonUnread.Counts(data);
+            changed = previousUnread.Count != currentUnread.Count || previousUnread.Any(item => currentUnread.GetValueOrDefault(item.Key) != item.Value);
+        }
+        if (changed)
+        {
+            try { UnreadChanged?.Invoke(); }
+            catch (Exception error) { System.Diagnostics.Trace.TraceWarning("Unread badge observer failed: " + error.Message); }
         }
     }
 
@@ -392,7 +437,7 @@ internal sealed class PigeonService : IDisposable
             lock (gate)
             {
                 if (!data.Items.Any(item => item.Id == packet.Id && item.Peer == remote && !item.Outgoing))
-                    Edit(d => d.Items.Add(new(packet.Id, remote, false, "text", text, DateTimeOffset.Now, "saved")));
+                    Edit(d => d.Items.Add(new(packet.Id, remote, false, "text", text, DateTimeOffset.Now, "saved", Unread: readingPeer != remote)));
             }
         }
         else if (packet.Op == "cancel")
@@ -427,7 +472,7 @@ internal sealed class PigeonService : IDisposable
             var existing = data.Items.Find(entry => entry.Id == offer.Id);
             item = existing ?? new(offer.Id, peer.Key, false, "file", SafeName(offer.Name),
                 DateTimeOffset.Now, peer.Auto && offer.Size <= data.AutoLimit ? "receiving" : "pending",
-                offer.Size, SharePath(), offer.Digest);
+                offer.Size, SharePath(), offer.Digest, Unread: readingPeer != peer.Key);
             if (existing == null)
                 Edit(d => d.Items.Add(item));
         }
@@ -495,7 +540,11 @@ internal sealed class PigeonService : IDisposable
                     File.Delete(part);
                 else
                     File.Move(part, path);
-                Edit(d => Replace(d.Items, value => value.Id == item.Id, item with { Path = path, State = "saved" }));
+                Edit(d =>
+                {
+                    var current = d.Items.Find(value => value.Id == item.Id)!;
+                    Replace(d.Items, value => value.Id == item.Id, current with { Path = path, State = "saved" });
+                });
             }
             await PigeonWire.Send(stream, new("ok"), token);
         }
@@ -750,6 +799,7 @@ internal sealed class PigeonService : IDisposable
 
     public void Dispose()
     {
+        SetReadingPeer(null);
         stop.Cancel();
         listener?.Stop();
         identity.Dispose();

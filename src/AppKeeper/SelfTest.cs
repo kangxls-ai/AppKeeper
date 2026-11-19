@@ -93,10 +93,11 @@ internal static class SelfTest
             CheckIndependentTagOrder(directory);
             CheckQuickHistory(directory);
             RecentUsageSelfTest.Run(directory);
+            PigeonUnreadSelfTest.Run(directory);
             AgendaSyncSelfTest.Layout(directory);
             CheckPortableMigration(directory);
             System.Threading.Tasks.Task.Run(() => ModuleSelfTest.Run(directory)).GetAwaiter().GetResult();
-            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · independent tags, recent usage · Pigeon transfer, MarkDo phone pairing and encrypted sync, Store migration");
+            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · independent tags, recent usage · Pigeon unread badges and transfer, MarkDo phone pairing and encrypted sync, Store migration");
             return 0;
         }
         catch (Exception error)
@@ -164,7 +165,7 @@ internal static class SelfTest
         ModuleFiles.Write(Path.Combine(source, "AppKeeper.pigeon.json"), new PigeonData
         {
             Items = [new(id, "test-peer", true, "file", "queued.zip", DateTimeOffset.Now, "queued", Path: archive),
-                new(Guid.NewGuid(), "test-peer", false, "file", "received.txt", DateTimeOffset.Now, "saved", Path: received)]
+                new(Guid.NewGuid(), "test-peer", false, "file", "received.txt", DateTimeOffset.Now, "saved", Path: received, Unread: true)]
         });
 
         PortableMigration.Run(source, packaged.DataDirectory);
@@ -181,7 +182,8 @@ internal static class SelfTest
         Check(PigeonWire.Fingerprint(copied) == PigeonWire.Fingerprint(certificate), "preserve pairing identity");
         var pigeon = ModuleFiles.Read<PigeonData>(Path.Combine(packaged.DataDirectory, "AppKeeper.pigeon.json"));
         Check(pigeon.Items[0].Path != archive && File.Exists(pigeon.Items[0].Path) && File.Exists(archive) &&
-            pigeon.Items[1].Path == received && File.Exists(received), "migrate pending archive and keep saved files");
+            pigeon.Items[1].Path == received && File.Exists(received) && pigeon.Items[1].Unread,
+            "migrate pending archive, unread state and keep saved files");
         Check(new LibraryStore(source).Load(out _).StartWithWindows, "retain original preferences");
     }
 

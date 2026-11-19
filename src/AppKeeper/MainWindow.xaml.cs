@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private const string TagDragFormat = "AppKeeper.Tag";
     private readonly App app;
     private readonly ShellIcons icons = new();
+    private readonly PigeonUnreadBadge pigeonUnreadBadge = new();
     private readonly DispatcherTimer edgeTimer = new() { Interval = TimeSpan.FromMilliseconds(550) };
     private readonly DispatcherTimer tagScrollTimer = new() { Interval = TimeSpan.FromMilliseconds(70) };
     private readonly DispatcherTimer searchHistoryTimer = new() { Interval = TimeSpan.FromMilliseconds(850) };
@@ -53,6 +54,8 @@ public partial class MainWindow : Window
     {
         this.app = app;
         InitializeComponent();
+        PigeonUnreadHost.Content = pigeonUnreadBadge;
+        UpdatePigeonUnread();
         Title = ProductTitle.Text = app.ProductName;
         if (app.Data.WindowSize is { IsValid: true } size)
         {
@@ -181,6 +184,7 @@ public partial class MainWindow : Window
         if (!ready)
             return;
         RefreshStatus();
+        UpdatePigeonUnread();
         InboxButton.Content = $"待整理 · {app.Data.Entries.Count(entry => entry.Inbox)}";
         HomeButton.Background = Query.Length == 0 && !inbox ? activeBrush : Brushes.Transparent;
         InboxButton.Background = Query.Length == 0 && inbox ? activeBrush : Brushes.Transparent;
@@ -195,6 +199,14 @@ public partial class MainWindow : Window
             RenderTiles();
             RenderFolder();
         }
+    }
+
+    internal void UpdatePigeonUnread()
+    {
+        var count = app.PigeonUnreadTotal;
+        pigeonUnreadBadge.Update(count);
+        PigeonTab.ToolTip = count > 0 ? $"飞鸽传书 · {count} 条未读消息" : "飞鸽传书";
+        AutomationProperties.SetName(PigeonTab, count > 0 ? $"飞鸽传书，{count} 条未读消息" : "飞鸽传书");
     }
 
     private void RenderTiles()
@@ -893,7 +905,12 @@ public partial class MainWindow : Window
     private void OpenRecentPage(object sender, RoutedEventArgs e) =>
         OpenModule(() => recentUsagePage ??= new RecentUsagePage(app.RecentUsage), RecentTab);
     private void OpenPigeonPage(object sender, RoutedEventArgs e) =>
-        OpenModule(() => pigeonPage ??= new PigeonPage(app.Pigeon), PigeonTab);
+        OpenModule(() =>
+        {
+            pigeonPage ??= new PigeonPage(app.Pigeon);
+            pigeonPage.OpenList();
+            return pigeonPage;
+        }, PigeonTab);
     private void OpenAgendaPage(object sender, RoutedEventArgs e) =>
         OpenModule(() => agendaPage ??= new AgendaPage(app.Agenda, app.AgendaSync), AgendaTab);
 
