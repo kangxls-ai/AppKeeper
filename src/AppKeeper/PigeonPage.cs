@@ -229,8 +229,7 @@ internal sealed class PigeonPage : UserControl
         {
             var follow = history.VerticalOffset >= history.ScrollableHeight - 20;
             var oldScroll = history.VerticalOffset;
-            messages.Children.Clear();
-            foreach (var item in items) messages.Children.Add(Message(item));
+            RefreshMessages(messages, items, Message);
             if (current == null)
                 messages.Children.Add(new TextBlock { Text = "选择一台电脑查看消息\n打开对话后，该电脑的未读提示会消失。",
                     TextWrapping = TextWrapping.Wrap, Foreground = Brushes.LightSteelBlue, Margin = new(8, 32, 8, 0) });
@@ -311,10 +310,51 @@ internal sealed class PigeonPage : UserControl
         _ => "未配对"
     };
 
-    private Border Message(PigeonItem item)
+    internal static void RefreshMessages(StackPanel container, PigeonItem[] items, Func<PigeonItem, Border> create)
+    {
+        var existing = container.Children.OfType<Border>().Where(view => view.Tag is PigeonItem)
+            .ToDictionary(view => ((PigeonItem)view.Tag).Id);
+        // Keep unchanged message controls attached so incoming messages or file progress cannot cancel text selection.
+        for (var index = 0; index < items.Length; index++)
+        {
+            var item = items[index];
+            var view = existing.GetValueOrDefault(item.Id);
+            if (view?.Tag is not PigeonItem old || (old with { Unread = false }) != (item with { Unread = false }))
+                view = create(item);
+            if (index < container.Children.Count && ReferenceEquals(container.Children[index], view)) continue;
+            container.Children.Remove(view);
+            container.Children.Insert(index, view);
+        }
+        while (container.Children.Count > items.Length) container.Children.RemoveAt(items.Length);
+    }
+
+    internal Border Message(PigeonItem item)
     {
         var details = new StackPanel();
-        var caption = ModuleUi.Text(item.Value, item.Kind == "file");
+        FrameworkElement caption = item.Kind == "text" ? new TextBox
+        {
+            Text = item.Value, IsReadOnly = true, IsReadOnlyCaretVisible = true, IsUndoEnabled = false,
+            Style = null, FontSize = 14, Padding = new(0), BorderThickness = new(0),
+            Background = Brushes.Transparent, Foreground = Brushes.White, CaretBrush = Brushes.White,
+            TextWrapping = TextWrapping.Wrap, AcceptsReturn = true,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            ToolTip = "拖动选择文字，Ctrl+C 复制选中内容；右键可复制全文"
+        } : ModuleUi.Text(item.Value, true);
+        var menu = new ContextMenu();
+        if (caption is TextBox text)
+        {
+            var selection = new MenuItem { Header = "复制选中内容", InputGestureText = "Ctrl+C", IsEnabled = false };
+            selection.Click += (_, _) => Action(() => { if (text.SelectionLength > 0) Clipboard.SetText(text.SelectedText); });
+            menu.Opened += (_, _) => selection.IsEnabled = text.SelectionLength > 0;
+            menu.Items.Add(selection);
+            caption.ContextMenu = menu;
+            AutomationProperties.SetName(text, "聊天消息，可选择文字复制");
+        }
+        var copy = new MenuItem { Header = item.Kind == "file" ? "复制文件" : "复制全文",
+            IsEnabled = item.Kind == "text" || item.LocalFile != null,
+            ToolTip = item.Kind == "file" && item.LocalFile == null ? "文件接收完成后才能复制" : "复制后可粘贴到其他应用" };
+        copy.Click += (_, _) => Action(() => PigeonClipboard.Copy(item));
+        menu.Items.Add(copy);
         details.Children.Add(caption);
         var state = item.State switch
         {
@@ -368,17 +408,16 @@ internal sealed class PigeonPage : UserControl
                     Open();
                 }
             };
-            var menu = new ContextMenu();
             var open = new MenuItem { Header = "打开文件" };
             open.Click += (_, _) => Open();
             menu.Items.Add(open);
-            caption.ContextMenu = menu;
             controls.Children.Add(ModuleUi.Button("打开所在文件夹", () => Action(() => RevealFile(path))));
             if (item.OriginalFolder is { } original && Path.IsPathFullyQualified(original))
                 controls.Children.Add(ModuleUi.Button("打开原文件夹", () => Action(() => OpenDirectory(original))));
         }
         details.Children.Add(controls);
         return new Border { Child = details, Background = item.Outgoing ? ModuleUi.Accent : System.Windows.Media.Brushes.DarkSlateGray,
+            ContextMenu = menu, Tag = item,
             CornerRadius = new(10), Padding = new(8), Margin = new(0, 2, 6, 4),
             HorizontalAlignment = item.Outgoing ? HorizontalAlignment.Right : HorizontalAlignment.Left };
     }

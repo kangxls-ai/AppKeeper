@@ -94,10 +94,11 @@ internal static class SelfTest
             CheckQuickHistory(directory);
             RecentUsageSelfTest.Run(directory);
             PigeonUnreadSelfTest.Run(directory);
+            PigeonCopySelfTest.Run(directory);
             AgendaSyncSelfTest.Layout(directory);
             CheckPortableMigration(directory);
             System.Threading.Tasks.Task.Run(() => ModuleSelfTest.Run(directory)).GetAwaiter().GetResult();
-            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · independent tags, recent usage · Pigeon unread badges and transfer, MarkDo phone pairing and encrypted sync, Store migration");
+            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · independent tags, recent usage · Pigeon unread, partial text/file copy and transfer, MarkDo phone pairing and encrypted sync, Store migration");
             return 0;
         }
         catch (Exception error)
