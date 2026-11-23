@@ -1,5 +1,7 @@
 # AppKeeper
 
+Mac Apple Silicon 测试版已加入独立项目，功能范围、DMG 打包、签名状态与验收方式见 [Mac 版说明](packaging/mac/README.md)。Windows 版继续使用现有 WPF 项目。
+
 AppKeeper 是 Windows 10/11 x64 的应用启动器。半透明窗口采用 Launchpad 风格的分页图标网格。
 
 左侧可切换「快捷应用」「最近访问」「飞鸽传书」和「日程管理」。标题栏提供最小化、最大化、还原和隐藏操作。普通窗口可拖动标题栏移动、拖右下角调整尺寸，最小宽度为 300 个逻辑像素。

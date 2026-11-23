@@ -79,7 +79,7 @@ internal sealed class AgendaLanSync : IDisposable
         {
             try { _ = AgendaSyncProtocol.DecodeKey(AgendaKeyProtection.Unprotect(phone.ProtectedKey)); readable.Add(phone); }
             catch (Exception error) when (error is CryptographicException or FormatException or ArgumentException)
-            { credentialNotice = "部分手机凭据无法用于当前 Windows 用户，请重新配对；日程保留。"; }
+            { credentialNotice = "部分手机凭据无法用于当前用户，请重新配对；日程保留。"; }
         }
         settings.Phones = readable;
     }
@@ -145,7 +145,7 @@ internal sealed class AgendaLanSync : IDisposable
         catch
         {
             if (next != null) await next.DisposeAsync().ConfigureAwait(false);
-            lock (gate) status = $"端口 {overridePort ?? settings.Port} 无法启动，可能已被占用；请更换端口或退出原版 Windows MarkDo。";
+            lock (gate) status = $"端口 {overridePort ?? settings.Port} 无法启动，可能已被占用；请更换端口或退出占用该端口的 MarkDo。";
             throw;
         }
         finally { lifecycle.Release(); }

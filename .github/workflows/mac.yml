@@ -1,0 +1,34 @@
+name: Build EasyAppKeeper Mac
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify Apple Silicon runner
+        run: test "$(uname -m)" = arm64
+      - name: Build app, verify signatures and test shared protocols
+        run: bash packaging/mac/build.sh
+      - name: Verify native application scan
+        run: |
+          artifacts/mac/EasyAppKeeper.app/Contents/MacOS/EasyAppKeeper.Native --scan > artifacts/mac/scan.json
+          python3 -c 'import json; a=json.load(open("artifacts/mac/scan.json")); assert len(a)>0 and all(x["Path"].endswith(".app") for x in a); print("PASS: macOS application scan",len(a))'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EasyAppKeeper-mac-arm64
+          path: |
+            artifacts/mac/*.zip
+            artifacts/mac/*.dmg
+            artifacts/mac/self-test.txt
+          if-no-files-found: error

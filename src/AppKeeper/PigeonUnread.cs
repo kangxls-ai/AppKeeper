@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+#if !MAC
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+#endif
 
 namespace AppKeeper;
 
@@ -21,6 +23,7 @@ internal static class PigeonUnread
         visible && active && !minimized && !choosing ? selected : null;
 }
 
+#if !MAC
 internal sealed class PigeonUnreadBadge : Border
 {
     private readonly TextBlock text = new()
@@ -41,3 +44,4 @@ internal sealed class PigeonUnreadBadge : Border
     }
     internal string DisplayText => text.Text;
 }
+#endif

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefineConstants>$(DefineConstants);MAC</DefineConstants>
+    <AssemblyName>EasyAppKeeper</AssemblyName>
+    <Version>1.4.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <PackageReference Include="QRCoder" Version="1.8.1" />
+    <Compile Include="../AppKeeper/Library.cs;../AppKeeper/Layout.cs;../AppKeeper/Pinyin.cs;../AppKeeper/QuickHistory.cs;../AppKeeper/ModuleFiles.cs;../AppKeeper/PigeonData.cs;../AppKeeper/PigeonWire.cs;../AppKeeper/PigeonService.cs;../AppKeeper/PigeonUnread.cs;../AppKeeper/AgendaStore.cs;../AppKeeper/AgendaOperation.cs;../AppKeeper/AgendaSyncProtocol.cs;../AppKeeper/AgendaLanSync.cs;../AppKeeper/AgendaSyncSelfTest.cs;../AppKeeper/ModuleSelfTest.cs" Link="Shared/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../AppKeeper/Assets/pinyin.txt" LogicalName="AppKeeper.Assets.pinyin.txt" />
+    <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.txt" />
+    <AvaloniaResource Include="../AppKeeper/Assets/AppKeeper.ico" Link="Assets/AppKeeper.ico" />
+  </ItemGroup>
+</Project>

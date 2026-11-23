@@ -7,10 +7,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+#if !MAC
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+#endif
 
 namespace AppKeeper;
 
@@ -60,6 +62,7 @@ internal static class AgendaSyncSelfTest
         Check(!File.ReadAllText(Path.Combine(root, "AppKeeper.agenda-sync.json")).Contains(token), "protect phone credential at rest");
     }
 
+#if !MAC
     internal static void Layout(string directory)
     {
         var root = Directory.CreateDirectory(Path.Combine(directory, "phone-panel-layout")).FullName;
@@ -84,6 +87,7 @@ internal static class AgendaSyncSelfTest
             using var output = File.Create(Path.Combine(target, $"phone-pairing-{width}.png")); encoder.Save(output);
         }
     }
+#endif
     private static void Check(bool valid, string message)
     { if (!valid) throw new InvalidOperationException("MarkDo sync test failed: " + message); }
 }

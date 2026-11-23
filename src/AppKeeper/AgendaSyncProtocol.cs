@@ -62,6 +62,7 @@ internal static class AgendaSyncProtocol
 }
 
 // Pairing keys are tied to the current Windows user, like MarkDo's secure storage.
+#if !MAC
 internal static class AgendaKeyProtection
 {
     [StructLayout(LayoutKind.Sequential)] private struct Blob { internal int Length; internal IntPtr Bytes; }
@@ -93,3 +94,4 @@ internal static class AgendaKeyProtection
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CryptUnprotectData(ref Blob input, IntPtr description, IntPtr entropy, IntPtr reserved, IntPtr prompt, uint flags, out Blob output);
     [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);
 }
+#endif
