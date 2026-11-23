@@ -22,14 +22,15 @@ internal sealed partial class MacWindow
             e.DragEffects=MacLauncher.Effect(e.DataTransfer);e.Handled=true;
             if(e.DragEffects!=DragDropEffects.None)Status(e.DataTransfer.Contains(DataFormat.File)?"松开创建入口":"左右排序 / 中央分组");
         },RoutingStrategies.Bubble,true);
-        // Tunnel external files before TextBox/ScrollViewer consumes them. Internal payloads continue to the specific tile/tag target.
+        // Drop is a bubble-only event in Avalonia 11. Observe handled events as well, so text fields
+        // and tag buttons cannot swallow a native Finder payload before the page receives it.
         host.AddHandler(DragDrop.DropEvent,(_,e)=>
         {
             if(section!="快捷应用"||!e.DataTransfer.Contains(DataFormat.File)||e.DataTransfer.Contains(MacLauncher.EntryFormat)||e.DataTransfer.Contains(MacLauncher.TagFormat))return;
             var target=e.Source as Avalonia.Visual;var tagTarget=target?.GetSelfAndVisualAncestors().OfType<Control>().Select(c=>c.Tag).OfType<LauncherTag>().FirstOrDefault();var destination=tagTarget!=null?tagTarget.Name:tag;
             e.Handled=true;e.DragEffects=DragDropEffects.Copy;
-            Run(()=>{var paths=MacLauncher.Paths(e.DataTransfer);if(paths.Length==0)throw new IOException("未能读取访达拖入的本机路径。");foreach(var path in paths)state.Add(path,destination);Apps();Status($"已添加或关联 {paths.Length} 个入口");});
-        },RoutingStrategies.Tunnel,true);
+            Run(()=>{var paths=MacLauncher.Paths(e.DataTransfer);if(paths.Length==0)throw new IOException("未能读取访达拖入的本机路径。");foreach(var path in paths)state.Add(path,destination);tag=destination;folder=null;query.Clear();page=0;Apps();Status($"已添加或关联 {paths.Length} 个入口");});
+        },RoutingStrategies.Bubble,true);
         host.AddHandler(DragDrop.DropEvent,TileBlankDrop);
         tiles.Background=Brushes.Transparent;
         gridViewport.SizeChanged+=(_,_)=>{var size=MacLauncher.Capacity(gridViewport.Bounds.Width,gridViewport.Bounds.Height);if(size!=pageSize){pageSize=size;RenderTiles();}};

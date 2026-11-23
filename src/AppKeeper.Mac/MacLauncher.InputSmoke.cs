@@ -20,6 +20,7 @@ internal sealed partial class MacWindow
         using var external=new DataTransfer();foreach(var item in new IStorageItem[]{fileItem,folderItem,appItem})external.Add(DataTransferItem.Create(DataFormat.File,item));
         void Drop(Control target,IDataTransfer data,DragDropEffects expected,double x=5)
         {
+            Console.WriteLine($"INPUT: drop {expected} on {target.GetType().Name} / {target.Tag}");
             var over=new DragEventArgs(DragDrop.DragOverEvent,data,target,new Point(x,5),KeyModifiers.None){Source=target};target.RaiseEvent(over);
             if(over.DragEffects!=expected)throw new Exception("拖放接收效果未声明："+expected);
             var drop=new DragEventArgs(DragDrop.DropEvent,data,target,new Point(x,5),KeyModifiers.None){Source=target};target.RaiseEvent(drop);
