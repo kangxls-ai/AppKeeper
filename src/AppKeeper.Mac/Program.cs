@@ -111,8 +111,9 @@ internal static class MacSelfTest
             var sample=Path.Combine(root,"sample.txt");File.WriteAllText(sample,"sample");state.Add(sample,null);state.Data.Tags.Add("办公");Layout.AssignTag(state.Data,state.Data.Entries[0],"办公");
             state.Visit(state.Data.Entries[0]);state.Settings.RecordVisits=false;state.Visit(state.Data.Entries[0]);
             if(new MacState(state.Root).Settings.Visits.Count!=1 || !Pinyin.Matches("计算器","jisuanqi"))throw new Exception("Mac visits or pinyin failed");
+            MacLauncherSelfTest.Run(root);
             await ModuleSelfTest.Run(root);
-            Console.WriteLine("PASS: Mac local storage, scoped recent history, pinyin, Pigeon pairing/offline text/ZIP/resume/unread, SQLite, MarkDo encrypted phone sync");return 0;
+            Console.WriteLine("PASS: launcher pins, drop path normalization, gesture debounce, scoped recent history, pinyin, Pigeon pairing/offline text/ZIP/resume/unread, SQLite, MarkDo encrypted phone sync");return 0;
         }
         catch(Exception e){Console.Error.WriteLine(e);return 1;}
         finally{Directory.Delete(root,true);}

@@ -78,6 +78,8 @@ internal sealed class MacSettings
     public List<MacVisit> Visits { get; set; } = [];
     public List<string> Excluded { get; set; } = [];
     public List<string> Hidden { get; set; } = [];
+    public Dictionary<string,List<Guid>> LauncherPins { get; set; } = [];
+    public List<string> LauncherTagOrder { get; set; } = [];
 }
 
 internal sealed class MacState
@@ -90,8 +92,37 @@ internal sealed class MacState
     {
         Root = root; Directory.CreateDirectory(root);
         if (OperatingSystem.IsMacOS()) File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        Store = new(root); Data = Store.Load(out _); Layout.EnsureTagOrders(Data);
+        Store = new(root); Data = LoadLibrary(); Layout.EnsureTagOrders(Data);
         Settings = ReadSettings();
+    }
+    private Library LoadLibrary()
+    {
+        // Old directory-picker URLs could end in '/': repair only blank names, validate the entire
+        // repaired snapshot, and preserve the original before saving. Other corruption follows normal backup recovery.
+        if(File.Exists(Store.DataPath))
+        {
+            var temp=Path.Combine(Root,"name-repair-"+Guid.NewGuid().ToString("N")+".json");
+            try
+            {
+                var candidate=JsonSerializer.Deserialize<Library>(File.ReadAllText(Store.DataPath));var changed=false;
+                foreach(var entry in candidate?.Entries??[])
+                    if(entry!=null&&string.IsNullOrWhiteSpace(entry.Name)&&entry.Kind is EntryKind.File or EntryKind.Directory&&Path.IsPathFullyQualified(entry.Target))
+                    {entry.Target=Path.TrimEndingDirectorySeparator(Path.GetFullPath(entry.Target));entry.Name=DefaultName(entry.Target,entry.Kind);changed=true;}
+                if(changed&&candidate!=null)
+                {
+                    ModuleFiles.Write(temp,candidate);var repaired=LibraryStore.Read(temp);
+                    File.Copy(Store.DataPath,Store.DataPath+".before-name-repair-"+Guid.NewGuid().ToString("N"));Store.Save(repaired);return repaired;
+                }
+            }
+            catch(Exception e) when(e is JsonException or InvalidDataException or ArgumentException){ }
+            finally{if(File.Exists(temp))File.Delete(temp);}
+        }
+        return Store.Load(out _);
+    }
+    private static string DefaultName(string path,EntryKind kind)
+    {
+        var name=kind==EntryKind.Directory?Path.GetFileName(path):Path.GetFileNameWithoutExtension(path);
+        return string.IsNullOrWhiteSpace(name)?new DirectoryInfo(path).Name:name;
     }
     private MacSettings ReadSettings()
     {
@@ -108,11 +139,13 @@ internal sealed class MacState
     internal void Import(string path) { var next = LibraryStore.Read(path); Data = next; Save(); }
     internal void Add(string path, string? tag, string? label = null)
     {
+        if(!WindowsCatalog.IsWeb(path))path=Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        if(!WindowsCatalog.IsWeb(path)&&!File.Exists(path)&&!Directory.Exists(path))throw new FileNotFoundException("找不到拖入的文件或文件夹。",path);
         var kind = WindowsCatalog.IsWeb(path) ? EntryKind.Web : Directory.Exists(path) && !path.EndsWith(".app",StringComparison.OrdinalIgnoreCase) ? EntryKind.Directory : EntryKind.File;
-        var existing = Data.Entries.Find(e=>e.Target==path);
-        if(existing!=null) { Layout.AssignTag(Data,existing,tag); Save(); return; }
-        var entry = new Entry { Name=label??Path.GetFileNameWithoutExtension(path),Target=path,Kind=kind };
-        if(kind==EntryKind.Web && label==null) entry.Name=new Uri(path).Host;
+        var existing = Data.Entries.Find(e=>e.Target==path||(e.Kind is EntryKind.File or EntryKind.Directory&&Path.IsPathFullyQualified(e.Target)&&Path.TrimEndingDirectorySeparator(Path.GetFullPath(e.Target))==path));
+        if(existing!=null) { existing.Target=path;if(string.IsNullOrWhiteSpace(existing.Name))existing.Name=DefaultName(path,kind);Layout.AssignTag(Data,existing,tag); Save(); return; }
+        var entry = new Entry { Name=string.IsNullOrWhiteSpace(label)?DefaultName(path,kind):label.Trim(),Target=path,Kind=kind };
+        if(kind==EntryKind.Web && string.IsNullOrWhiteSpace(label)) entry.Name=new Uri(path).Host;
         Data.Entries.Add(entry); Layout.AssignTag(Data,entry,tag); Save();
     }
     internal void Visit(Entry entry)
