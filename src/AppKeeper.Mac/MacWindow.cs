@@ -106,7 +106,7 @@ internal sealed partial class MacWindow : Window
     private void UpdateBadges(){var count=pigeon.UnreadCounts().Values.Sum();navigation["飞鸽传书"].Content="飞鸽传书"+(count>0?$" 🔴{PigeonUnread.Label(count)}":"");if(section=="飞鸽传书"&&IsVisible)RefreshChat();}
     private void Apps()
     {
-        foreach(var control in new Control[]{query,searchBar,recentBar,tags,tiles})
+        foreach(var control in new Control[]{query,searchBar,recentBar,tags,tiles,pageNumber})
         {
             if(control.Parent is Panel panel)panel.Children.Remove(control);
             else if(control.Parent is ContentControl content)content.Content=null;
