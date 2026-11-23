@@ -78,7 +78,7 @@ internal sealed partial class MacWindow : Window
     private Button B(string label,Action action)=>Button(label,()=>Run(action));
     private static Button Button(string label,Action action){var b=new Button{Content=label,Padding=new Thickness(10,7)};b.Click+=(_,_)=>action();return b;}
     private async void Run(Action action){try{action();}catch(Exception e){await Alert(e.Message);}}
-    private async Task Safe(Func<Task> action){try{await action();}catch(Exception e){await Alert(e.Message);}}
+    private async Task Safe(Func<Task> action){try{await action();}catch(Exception e){if(MacPlatform.TestRoot!=null)throw;await Alert(e.Message);}}
     private async Task Alert(string message)=>await Dialog("提示",[T(message)],false);
     private StackPanel Stack(params Control[] children){var panel=new StackPanel{Spacing=12};foreach(var c in children)panel.Children.Add(c);return panel;}
     private Control Scroll(Control control)=>new ScrollViewer{Content=control,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};
@@ -187,6 +187,7 @@ internal sealed partial class MacWindow : Window
             Width=width;Height=720;await Task.Delay(150);
             foreach(var name in new[]{"快捷应用","最近访问","飞鸽传书","日程管理","快捷应用"})
             {
+                Console.WriteLine($"UI: {name} {width}");
                 Navigate(name);await Task.Delay(80);
                 if(name=="快捷应用"){Apps();query.Text="jisuanqi";query.Text="";}
                 if(name=="飞鸽传书"&&pigeon.Peers().FirstOrDefault() is {} samplePeer)

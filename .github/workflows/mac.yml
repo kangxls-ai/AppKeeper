@@ -41,6 +41,7 @@ jobs:
           artifacts/mac/EasyAppKeeper.app/Contents/MacOS/EasyAppKeeper.Native --scan > artifacts/mac/scan.json
           python3 -c 'import json; a=json.load(open("artifacts/mac/scan.json")); assert len(a)>0 and all(x["Path"].endswith(".app") for x in a); print("PASS: macOS application scan",len(a))'
       - name: Exercise desktop views in isolated data directory
+        timeout-minutes: 2
         env:
           APPKEEPER_MAC_UI_DIR: artifacts/mac/ui
         run: artifacts/mac/EasyAppKeeper.app/Contents/MacOS/EasyAppKeeper --ui-smoke

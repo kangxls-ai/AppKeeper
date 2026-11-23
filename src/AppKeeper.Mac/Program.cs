@@ -63,7 +63,7 @@ public sealed class MacApp : Application
             _ = StartSync();
             if(desktop.Args.Contains("--ui-smoke")) Dispatcher.UIThread.Post(async()=>
             {
-                try { await window.ScanApps();await window.Smoke();Console.WriteLine("PASS: Mac desktop view navigation, repeated launcher rendering, narrow/wide layouts and screenshots");desktop.Shutdown(0); }
+                try { Console.WriteLine("UI: starting application scan");await window.ScanApps();Console.WriteLine("UI: scan complete");await window.Smoke();Console.WriteLine("PASS: Mac desktop view navigation, repeated launcher rendering, narrow/wide layouts and screenshots");desktop.Shutdown(0); }
                 catch(Exception e){Console.Error.WriteLine(e);desktop.Shutdown(1);}
             });
             else _ = window.ScanApps();
