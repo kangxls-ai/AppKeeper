@@ -37,7 +37,8 @@ internal sealed partial class MacWindow
         range.SelectionChanged+=(_,_)=>Draw();kind.SelectionChanged+=(_,_)=>Draw();filter.TextChanged+=(_,_)=>Draw();
         var toolbar=new WrapPanel();toolbar.Children.Add(range);toolbar.Children.Add(kind);toolbar.Children.Add(B("管理记录",()=>_=Safe(async()=>{var record=new CheckBox{Content="记录通过本应用打开的入口",IsChecked=state.Settings.RecordVisits};var clear=new CheckBox{Content="清空全部访问记录及排行"};var restore=new CheckBox{Content="恢复隐藏项并清除路径排除"};if(await Dialog("访问记录管理",[record,clear,restore,T("只影响本应用的记录，不删除实际文件。",12)])){state.Settings.RecordVisits=record.IsChecked==true;if(clear.IsChecked==true)state.Settings.Visits.Clear();if(restore.IsChecked==true){state.Settings.Hidden.Clear();state.Settings.Excluded.Clear();}state.Save();Draw();}})));
         var split=new Grid{ColumnDefinitions=new ColumnDefinitions("*,2*")};var left=Stack(T("七天高频 · TOP 50",18),ranking);left.Margin=new Thickness(0,0,20,0);split.Children.Add(left);var right=Stack(T("最近文件与入口",18),rows);Grid.SetColumn(right,1);split.Children.Add(right);
-        host.Content=Scroll(Stack(T("最近访问",24),T("仅记录通过 EasyAppKeeper 打开的入口",12),toolbar,filter,split));Draw();
+        Control lists=split;if(Bounds.Width<650){split.Children.Clear();lists=Stack(left,right);}
+        host.Content=Scroll(Stack(T("最近访问",24),T("仅记录通过 EasyAppKeeper 打开的入口",12),toolbar,filter,lists));Draw();
     }
     private void Pigeon()
     {
@@ -193,7 +194,7 @@ internal sealed partial class MacWindow
         hotkey.KeyDown+=(_,e)=>{if(TryHotkey(e.Key,e.KeyModifiers,out var c,out var m)){code=c;modifiers=m;hotkey.Text=HotkeyName(c,m);e.Handled=true;}};
         var export=B("导出布局",()=>_=Safe(async()=>{var f=await StorageProvider.SaveFilePickerAsync(new(){SuggestedFileName="EasyAppKeeper布局.json"});if(f?.TryGetLocalPath() is {} p)state.Store.Export(p,state.Data);}));
         var import=B("导入布局",()=>_=Safe(async()=>{var files=await StorageProvider.OpenFilePickerAsync(new());if(files.FirstOrDefault()?.TryGetLocalPath() is {} p){state.Import(p);if(section=="快捷应用")Apps();}}));
-        var license=B("第三方许可",()=>_=Safe(async()=>{using var stream=typeof(MacWindow).Assembly.GetManifestResourceStream("EasyAppKeeper.THIRD-PARTY-NOTICES.txt");if(stream!=null)await Alert(await new StreamReader(stream).ReadToEndAsync());}));
+        var license=B("第三方许可",()=>_=Safe(async()=>{using var stream=typeof(MacWindow).Assembly.GetManifestResourceStream("AppKeeper.THIRD-PARTY-NOTICES.txt");if(stream!=null)await Alert(await new StreamReader(stream).ReadToEndAsync());}));
         if(await Dialog("偏好设置",[T("全局快捷键（Option / Command / Control 加字母或空格）",12),hotkey,ball,record,login,export,import,B("打开数据目录",()=>MacPlatform.Open(state.Root)),license]))
         {
             await MacPlatform.Native("--login",login.IsChecked==true?"enable":"disable");state.Settings.Ball=ball.IsChecked==true;state.Settings.RecordVisits=record.IsChecked==true;state.Settings.HotkeyCode=code;state.Settings.HotkeyModifiers=modifiers;state.Save();PreferencesSaved?.Invoke();

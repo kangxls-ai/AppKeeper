@@ -29,7 +29,7 @@ internal static class MacPlatform
     }
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize() => NativeLibrary.SetDllImportResolver(typeof(MacPlatform).Assembly, (name, assembly, paths) =>
-        name == "winsqlite3.dll" && OperatingSystem.IsMacOS() ? NativeLibrary.Load("/usr/lib/libsqlite3.dylib") : IntPtr.Zero);
+        name != "winsqlite3.dll" ? IntPtr.Zero : OperatingSystem.IsMacOS() ? NativeLibrary.Load("/usr/lib/libsqlite3.dylib") : OperatingSystem.IsLinux() ? NativeLibrary.Load("libsqlite3.so.0") : IntPtr.Zero);
 }
 
 // Library validation uses this name in the shared Windows source; no Win32 APIs are called here.
@@ -46,7 +46,7 @@ internal static class AgendaKeyProtection
     {
         if (key != null) return key;
         var testKey = Environment.GetEnvironmentVariable("APPKEEPER_MAC_TEST_KEY");
-        var value = testKey ?? (OperatingSystem.IsMacOS() ? MacPlatform.Native("--key").GetAwaiter().GetResult() : throw new PlatformNotSupportedException("Mac 配对凭据需要 macOS 钥匙串。"));
+        var value = OperatingSystem.IsMacOS() ? MacPlatform.Native("--key").GetAwaiter().GetResult() : testKey ?? throw new PlatformNotSupportedException("Mac 配对凭据需要 macOS 钥匙串。");
         return key = Convert.FromBase64String(value);
     }
     internal static string Protect(string value)

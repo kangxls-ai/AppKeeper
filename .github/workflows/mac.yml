@@ -6,6 +6,19 @@ on:
 permissions:
   contents: read
 jobs:
+  compile:
+    name: Compile and test portable logic
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet build src/AppKeeper.Mac/AppKeeper.Mac.csproj -c Release
+      - run: dotnet src/AppKeeper.Mac/bin/Release/net10.0/EasyAppKeeper.dll --self-test
   mac:
     runs-on: macos-15
     timeout-minutes: 25
