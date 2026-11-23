@@ -154,7 +154,7 @@ internal static class ModuleSelfTest
             using var stream = PigeonWire.Encrypted(client.GetStream(), expected);
             await stream.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
-                TargetHost = "AppKeeper Pigeon", ClientCertificates = new X509CertificateCollection { identity },
+                TargetHost = "appkeeper-pigeon.local", ClientCertificates = new X509CertificateCollection { identity },
                 EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
                 CertificateRevocationCheckMode = X509RevocationMode.NoCheck
             }, timeout.Token);
