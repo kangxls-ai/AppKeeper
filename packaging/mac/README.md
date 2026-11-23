@@ -43,3 +43,5 @@ bash packaging/mac/build.sh
 - [ ] 菜单栏驻留、下次登录启动、Applications 目录移动后的处理。
 
 自动化协议与打包验证不能代替上述真实桌面、局域网和手机验收。
+
+云端桌面检查使用软件渲染，避免虚拟 Mac 的 Metal 着色器编译超时；正常启动按 Metal、OpenGL、软件渲染顺序选择。可用 `--software-rendering` 显式选择兼容模式，M5 Pro 的实际图形表现仍需实机验收。

@@ -17,7 +17,10 @@ internal static class Program
         if (args.Contains("--self-test")) return MacSelfTest.Run().GetAwaiter().GetResult();
         if (args.Contains("--ui-smoke")) MacPlatform.TestRoot=Path.Combine(Path.GetTempPath(),"EasyAppKeeper-ui-"+Guid.NewGuid().ToString("N"));
         if (!OperatingSystem.IsMacOS()) { Console.Error.WriteLine("EasyAppKeeper Mac 需要 macOS；可使用 --self-test 运行共享逻辑检查。"); return 1; }
-        return AppBuilder.Configure<MacApp>().UsePlatformDetect().LogToTrace().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+        var software=args.Contains("--software-rendering")||args.Contains("--ui-smoke");
+        return AppBuilder.Configure<MacApp>().UsePlatformDetect()
+            .With(new AvaloniaNativePlatformOptions{AppSandboxEnabled=false,RenderingMode=software?[AvaloniaNativeRenderingMode.Software]:[AvaloniaNativeRenderingMode.Metal,AvaloniaNativeRenderingMode.OpenGl,AvaloniaNativeRenderingMode.Software]})
+            .LogToTrace().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
     }
 }
 
