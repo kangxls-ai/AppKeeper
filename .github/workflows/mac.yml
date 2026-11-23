@@ -23,7 +23,7 @@ jobs:
       - run: dotnet build src/AppKeeper.Mac/AppKeeper.Mac.csproj -c Release
       - run: dotnet src/AppKeeper.Mac/bin/Release/net10.0/EasyAppKeeper.dll --self-test
   mac:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
