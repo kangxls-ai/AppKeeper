@@ -3,6 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Themes.Fluent;
+using Avalonia.Media;
+using Avalonia.Styling;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Threading;
 using System.Diagnostics;
 using System.Security.Cryptography;
@@ -33,7 +36,15 @@ public sealed class MacApp : Application
     private PigeonService? pigeon;
     private AgendaLanSync? sync;
     private FileStream? instance;
-    public override void Initialize() => Styles.Add(new FluentTheme());
+    public override void Initialize()
+    {
+        Styles.Add(new FluentTheme());
+        Resources.ThemeDictionaries[ThemeVariant.Light]=new ResourceDictionary{{"MacControl",new SolidColorBrush(Color.Parse("#ffffff"))},{"MacLine",new SolidColorBrush(Color.Parse("#dce3ee"))}};
+        Resources.ThemeDictionaries[ThemeVariant.Dark]=new ResourceDictionary{{"MacControl",new SolidColorBrush(Color.Parse("#2b374c"))},{"MacLine",new SolidColorBrush(Color.Parse("#3a4961"))}};
+        Styles.Add(new Style(x=>x.OfType<Button>()){Setters={new Setter(Button.CornerRadiusProperty,new CornerRadius(8)),new Setter(Button.BackgroundProperty,new DynamicResourceExtension("MacControl")),new Setter(Button.BorderBrushProperty,new DynamicResourceExtension("MacLine")),new Setter(Button.BorderThicknessProperty,new Thickness(1)),new Setter(Button.FontSizeProperty,13d),new Setter(Button.MarginProperty,new Thickness(0,0,5,4))}});
+        Styles.Add(new Style(x=>x.OfType<TextBox>()){Setters={new Setter(TextBox.CornerRadiusProperty,new CornerRadius(9)),new Setter(TextBox.BorderBrushProperty,new DynamicResourceExtension("MacLine")),new Setter(TextBox.FontSizeProperty,14d)}});
+        Styles.Add(new Style(x=>x.OfType<Button>().Class("primary")){Setters={new Setter(Button.BackgroundProperty,new SolidColorBrush(Color.Parse("#477ec7"))),new Setter(Button.ForegroundProperty,Brushes.White),new Setter(Button.BorderThicknessProperty,new Thickness(0))}});
+    }
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

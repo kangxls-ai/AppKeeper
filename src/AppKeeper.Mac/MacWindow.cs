@@ -76,7 +76,7 @@ internal sealed partial class MacWindow : Window
     internal void Status(string text)=>notice.Text=text;
     private static TextBlock T(string text,double size=14)=>new(){Text=text,FontSize=size,TextWrapping=TextWrapping.Wrap};
     private Button B(string label,Action action)=>Button(label,()=>Run(action));
-    private static Button Button(string label,Action action){var b=new Button{Content=label,Padding=new Thickness(10,7)};b.Click+=(_,_)=>action();return b;}
+    private static Button Button(string label,Action action){var b=new Button{Content=label,Padding=new Thickness(10,7)};if(label is "发送" or "快速添加" or "确定" or "＋ 添加")b.Classes.Add("primary");b.Click+=(_,_)=>action();return b;}
     private async void Run(Action action){try{action();}catch(Exception e){await Alert(e.Message);}}
     private async Task Safe(Func<Task> action){try{await action();}catch(Exception e){if(MacPlatform.TestRoot!=null)throw;await Alert(e.Message);}}
     private async Task Alert(string message)=>await Dialog("提示",[T(message)],false);
@@ -103,7 +103,13 @@ internal sealed partial class MacWindow : Window
         foreach(var n in navigation)n.Value.Background=n.Key==name?Soft:null;
         if(name=="快捷应用")Apps();else if(name=="最近访问")Recent();else if(name=="飞鸽传书")Pigeon();else Agenda();UpdateBadges();
     }
-    private void UpdateBadges(){var count=pigeon.UnreadCounts().Values.Sum();navigation["飞鸽传书"].Content="飞鸽传书"+(count>0?$" 🔴{PigeonUnread.Label(count)}":"");if(section=="飞鸽传书"&&IsVisible)RefreshChat();}
+    private void UpdateBadges()
+    {
+        var count=pigeon.UnreadCounts().Values.Sum();var content=new Grid();content.Children.Add(T("飞鸽传书",12));
+        if(count>0)content.Children.Add(new Border{Background=new SolidColorBrush(Color.Parse("#e84d60")),CornerRadius=new CornerRadius(9),Padding=new Thickness(4,0),HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Top,Margin=new Thickness(0,-10,-8,0),Child=new TextBlock{Text=PigeonUnread.Label(count),Foreground=Brushes.White,FontSize=11}});
+        navigation["飞鸽传书"].Content=content;Avalonia.Automation.AutomationProperties.SetName(navigation["飞鸽传书"],count>0?$"飞鸽传书，{count} 条未读消息":"飞鸽传书");
+        if(section=="飞鸽传书"&&IsVisible)RefreshChat();
+    }
     private void Apps()
     {
         foreach(var control in new Control[]{query,searchBar,recentBar,tags,tiles,pageNumber})
