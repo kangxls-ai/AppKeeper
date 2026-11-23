@@ -45,6 +45,12 @@ jobs:
           APPKEEPER_MAC_UI_DIR: artifacts/mac/ui
         run: artifacts/mac/EasyAppKeeper.app/Contents/MacOS/EasyAppKeeper --ui-smoke
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EasyAppKeeper-mac-ui
+          path: artifacts/mac/ui/*.png
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
         with:
           name: EasyAppKeeper-mac-arm64
           path: |

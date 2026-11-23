@@ -67,6 +67,7 @@ internal sealed partial class MacWindow : Window
         SizeChanged+=(_,_)=>{rail.Width=Bounds.Width<640?78:112;if(WindowState==WindowState.Normal && Bounds.Width>=300){state.Data.WindowSize=new(Width,Height);}if(section=="快捷应用"){pageSize=Bounds.Width<640?12:24;RenderTiles();}var next=Bounds.Width<650;if(next!=compact){compact=next;if(section=="最近访问")Recent();else if(section=="飞鸽传书"){var selected=pigeon.Peers().FirstOrDefault(p=>p.Key==peer);Pigeon();if(selected!=null)_=Safe(()=>ChoosePeer(selected));}}};
         KeyDown+=(_,e)=>{if(e.Key==Key.Escape){Hide();pigeon.SetReadingPeer(null);} };
         query.TextChanged+=(_,_)=>{page=0;RenderTiles();};
+        query.KeyDown+=(_,e)=>{if(e.Key==Key.Enter&&Layout.Visible(state.Data,false,query.Text??"",tag).FirstOrDefault() is {} entry){e.Handled=true;Run(()=>{if(entry.Kind==EntryKind.Group){folder=entry.Id;RenderTiles();}else Open(entry);});}};
         DragDrop.SetAllowDrop(tiles,true);tiles.AddHandler(DragDrop.DropEvent,TileBlankDrop);
         pigeon.UnreadChanged+=()=>Dispatcher.UIThread.Post(UpdateBadges);
         poll.Tick+=(_,_)=>{if(IsVisible && section=="飞鸽传书")RefreshChat();};poll.Start();
@@ -114,7 +115,7 @@ internal sealed partial class MacWindow : Window
         searchBar.Children.Clear();foreach(var q in state.Data.SearchHistory){var button=B(q,()=>query.Text=q);var menu=new ContextMenu();menu.Items.Add(Menu("清除此条",()=>{QuickHistory.RemoveSearch(state.Data,q);state.Save();Apps();}));button.ContextMenu=menu;searchBar.Children.Add(button);}
         recentBar.Children.Clear();foreach(var entry in QuickHistory.Entries(state.Data)){var button=B((state.Data.PinnedEntries.Contains(entry.Id)?"📌 ":"")+entry.Name,()=>Open(entry));button.ContextMenu=EntryMenu(entry);recentBar.Children.Add(button);}
         tags.Children.Clear();foreach(var name in new[]{"全部"}.Concat(state.Data.Tags)){var b=B(name,()=>{tag=name=="全部"?null:name;page=0;Apps();});b.Background=(tag??"全部")==name?Soft:null;
-            if(name!="全部"){EnableDrag(b,"tag",name);DragDrop.SetAllowDrop(b,true);b.AddHandler(DragDrop.DropEvent,(_,e)=>{Run(()=>{if(e.Data.Get("tag") is string source)Layout.MoveTag(state.Data,source,name,true);else if(Dragged(e) is {} item)Layout.AssignTag(state.Data,item,name);else AddDropped(e);state.Save();Apps();});e.Handled=true;});b.ContextMenu=new ContextMenu{Items={Menu("删除标签",()=>{Layout.RemoveTag(state.Data,name);if(tag==name)tag=null;state.Save();Apps();})}};}
+            if(name!="全部"){EnableDrag(b,"tag",name);DragDrop.SetAllowDrop(b,true);b.AddHandler(DragDrop.DropEvent,(_,e)=>{Run(()=>{if(e.Data.Get("tag") is string source)Layout.MoveTag(state.Data,source,name,true);else if(Dragged(e) is {} item)Layout.AssignTag(state.Data,item,name);else AddDropped(e,name);state.Save();Apps();});e.Handled=true;});b.ContextMenu=new ContextMenu{Items={Menu("删除标签",()=>{Layout.RemoveTag(state.Data,name);if(tag==name)tag=null;state.Save();Apps();})}};}
             tags.Children.Add(b);}
         tags.Children.Add(B("＋ 标签",()=>_=Safe(async()=>{var name=await Prompt("标签名称（最多 24 字）");if(name==null)return;if(!Layout.IsTagName(name)||state.Data.Tags.Contains(name))throw new ArgumentException("标签名称无效或已存在。");state.Data.Tags.Add(name);Layout.EnsureTagOrders(state.Data);state.Save();Apps();})));
         var paging=new StackPanel{Orientation=Orientation.Horizontal,Spacing=10,HorizontalAlignment=HorizontalAlignment.Center};paging.Children.Add(B("‹",()=>{page=Math.Max(0,page-1);RenderTiles();}));paging.Children.Add(pageNumber);paging.Children.Add(B("›",()=>{page++;RenderTiles();}));
@@ -143,7 +144,7 @@ internal sealed partial class MacWindow : Window
         control.PointerMoved+=async(_,e)=>{if(down is {} point&&e.GetCurrentPoint(control).Properties.IsLeftButtonPressed&&(Math.Abs(e.GetPosition(control).X-point.X)+Math.Abs(e.GetPosition(control).Y-point.Y))>7){down=null;var data=new DataObject();data.Set(format,value);await DragDrop.DoDragDrop(e,data,DragDropEffects.Move);}};control.PointerReleased+=(_,_)=>down=null;
     }
     private Entry? Dragged(DragEventArgs e)=>Guid.TryParse(e.Data.Get("entry") as string,out var id)?state.Data.Entries.Find(x=>x.Id==id):null;
-    private void AddDropped(DragEventArgs e){foreach(var file in e.Data.GetFiles()??[]){var path=file.TryGetLocalPath();if(path!=null)state.Add(path,tag);}}
+    private void AddDropped(DragEventArgs e,string? targetTag=null){foreach(var file in e.Data.GetFiles()??[]){var path=file.TryGetLocalPath();if(path!=null)state.Add(path,targetTag??tag);}}
     private void TileBlankDrop(object? sender,DragEventArgs e){if(e.Handled)return;Run(()=>{var source=Dragged(e);if(source!=null){if(tag!=null)Layout.OrderInTag(state.Data,tag,source,null,true);else Layout.MoveHome(state.Data,source);}else AddDropped(e);state.Save();RenderTiles();});e.Handled=true;}
     private MenuItem Menu(string text,Action action){var m=new MenuItem{Header=text};m.Click+=(_,_)=>Run(action);return m;}
     private ContextMenu EntryMenu(Entry entry)
@@ -156,7 +157,7 @@ internal sealed partial class MacWindow : Window
         if(entry.Group!=null)menu.Items.Add(Menu("移出分组",()=>{Layout.MoveHome(state.Data,entry);state.Save();RenderTiles();}));
         menu.Items.Add(Menu("移除入口",()=>{Layout.Remove(state.Data,entry);state.Save();Apps();}));return menu;
     }
-    private void Open(Entry entry){MacPlatform.Open(entry.Target);state.Visit(entry);Hide();pigeon.SetReadingPeer(null);}
+    private void Open(Entry entry){MacPlatform.Open(entry.Target);if(section=="快捷应用")QuickHistory.RecordSearch(state.Data,query.Text??"");state.Visit(entry);Hide();pigeon.SetReadingPeer(null);}
     private async Task AddEntry()
     {
         var choice=new ComboBox{ItemsSource=new[]{"应用或文件","文件夹","网址"},SelectedIndex=0};if(!await Dialog("添加入口",[choice]))return;

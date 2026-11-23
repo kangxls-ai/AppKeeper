@@ -24,6 +24,7 @@ internal static class MacPlatform
     }
     internal static void Open(string path, bool reveal = false)
     {
+        if(!WindowsCatalog.IsWeb(path)&&!File.Exists(path)&&!Directory.Exists(path))throw new FileNotFoundException("找不到此入口，可能已移动、删除或磁盘未连接。",path);
         var start = new ProcessStartInfo("/usr/bin/open") { UseShellExecute = false };
         if (reveal) start.ArgumentList.Add("-R");
         start.ArgumentList.Add(path); Process.Start(start)?.Dispose();
@@ -101,7 +102,7 @@ internal sealed class MacState
     internal void Save()
     {
         Store.Save(Data); var file = Path.Combine(Root,"EasyAppKeeper.mac.json");
-        if(File.Exists(file)) File.Copy(file,file+".bak",true);
+        if(File.Exists(file)){try{_ = ModuleFiles.Read<MacSettings>(file);File.Copy(file,file+".bak",true);}catch(JsonException){}}
         ModuleFiles.Write(file,Settings);
     }
     internal void Import(string path) { var next = LibraryStore.Read(path); Data = next; Save(); }
