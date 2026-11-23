@@ -9,7 +9,8 @@ namespace AppKeeper;
 
 internal static class MacPlatform
 {
-    internal static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support", "EasyAppKeeper");
+    internal static string? TestRoot;
+    internal static string Root => TestRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support", "EasyAppKeeper");
     internal static string Helper => Path.Combine(AppContext.BaseDirectory, "EasyAppKeeper.Native");
     internal static async Task<string> Native(params string[] args)
     {

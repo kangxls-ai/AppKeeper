@@ -8,6 +8,7 @@ dotnet publish src/AppKeeper.Mac/AppKeeper.Mac.csproj -c Release -r osx-arm64 --
 xcrun swiftc packaging/mac/Native.swift -o "$app/Contents/MacOS/EasyAppKeeper.Native" -framework AppKit -framework Carbon -framework Security -target arm64-apple-macosx14.0
 cp packaging/mac/Info.plist "$app/Contents/Info.plist"
 cp THIRD-PARTY-NOTICES.txt "$app/Contents/Resources/THIRD-PARTY-NOTICES.txt"
+python3 packaging/mac/licenses.py "$app/Contents/Resources"
 # Source is the existing project icon; the Mac bundle needs an ICNS representation.
 iconset="$output/AppIcon.iconset"
 mkdir -p "$iconset"

@@ -53,6 +53,8 @@ internal sealed partial class MacWindow : Window
         Title="EasyAppKeeper";Width=state.Data.WindowSize?.Width??1000;Height=state.Data.WindowSize?.Height??720;MinWidth=300;MinHeight=440;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;
         TransparencyLevelHint=[WindowTransparencyLevel.AcrylicBlur,WindowTransparencyLevel.Transparent];
+        void UpdateAppearance()=>Background=new SolidColorBrush(Application.Current?.ActualThemeVariant==Avalonia.Styling.ThemeVariant.Dark?Color.FromArgb(234,28,36,51):Color.FromArgb(234,245,248,252));
+        UpdateAppearance();ActualThemeVariantChanged+=(_,_)=>UpdateAppearance();
         var shell=new Grid{ColumnDefinitions=new ColumnDefinitions("Auto,*"),Margin=new Thickness(8)};
         var rail=new StackPanel{Spacing=7,Width=112,Margin=new Thickness(0,20,12,0)};
         foreach(var label in new[]{"快捷应用","最近访问","飞鸽传书","日程管理"}){var button=B(label,()=>Navigate(label));button.HorizontalAlignment=HorizontalAlignment.Stretch;navigation[label]=button;rail.Children.Add(button);}
@@ -175,5 +177,23 @@ internal sealed partial class MacWindow : Window
     {
         var searches=new CheckBox{Content="清空检索记录",IsChecked=true};var visits=new CheckBox{Content="清空未锁定的最近打开记录",IsChecked=true};
         if(await Dialog("清理历史",[searches,visits,T("锁定项保留；可通过入口右键单独清除。",12)])){if(searches.IsChecked==true)state.Data.SearchHistory.Clear();if(visits.IsChecked==true)QuickHistory.ClearUnpinnedVisits(state.Data);state.Save();Apps();}
+    }
+    internal async Task Smoke()
+    {
+        var output=Environment.GetEnvironmentVariable("APPKEEPER_MAC_UI_DIR");
+        foreach(var width in new[]{1000,360})
+        {
+            Width=width;Height=720;await Task.Delay(150);
+            foreach(var name in new[]{"快捷应用","最近访问","飞鸽传书","日程管理","快捷应用"})
+            {
+                Navigate(name);await Task.Delay(80);
+                if(name=="快捷应用"){Apps();query.Text="jisuanqi";query.Text="";}
+                await Task.Delay(80);
+                if(!string.IsNullOrEmpty(output))
+                {
+                    Directory.CreateDirectory(output);using var bitmap=new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize((int)Bounds.Width,(int)Bounds.Height));bitmap.Render(this);bitmap.Save(Path.Combine(output,$"{name}-{width}.png"));
+                }
+            }
+        }
     }
 }

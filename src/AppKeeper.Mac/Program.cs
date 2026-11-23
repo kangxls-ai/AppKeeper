@@ -15,6 +15,7 @@ internal static class Program
     internal static int Main(string[] args)
     {
         if (args.Contains("--self-test")) return MacSelfTest.Run().GetAwaiter().GetResult();
+        if (args.Contains("--ui-smoke")) MacPlatform.TestRoot=Path.Combine(Path.GetTempPath(),"EasyAppKeeper-ui-"+Guid.NewGuid().ToString("N"));
         if (!OperatingSystem.IsMacOS()) { Console.Error.WriteLine("EasyAppKeeper Mac 需要 macOS；可使用 --self-test 运行共享逻辑检查。"); return 1; }
         return AppBuilder.Configure<MacApp>().UsePlatformDetect().LogToTrace().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
     }
@@ -53,7 +54,13 @@ public sealed class MacApp : Application
             UpdateHotkey(state);
             if(state.Settings.Ball) ball.Show();
             if(!desktop.Args!.Contains("--background")) window.Show();
-            _ = StartSync(); _ = window.ScanApps();
+            _ = StartSync();
+            if(desktop.Args.Contains("--ui-smoke")) Dispatcher.UIThread.Post(async()=>
+            {
+                try { await window.ScanApps();await window.Smoke();Console.WriteLine("PASS: Mac desktop view navigation, repeated launcher rendering, narrow/wide layouts and screenshots");desktop.Shutdown(0); }
+                catch(Exception e){Console.Error.WriteLine(e);desktop.Shutdown(1);}
+            });
+            else _ = window.ScanApps();
             desktop.Exit += (_,_)=> { window.FinalClose=true;ball.FinalClose=true;hotkey?.Kill();hotkey?.Dispose();tray.Dispose();sync.Dispose();pigeon.Dispose();instance.Dispose(); };
         }
         base.OnFrameworkInitializationCompleted();
