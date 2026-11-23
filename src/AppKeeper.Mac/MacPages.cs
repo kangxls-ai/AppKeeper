@@ -137,11 +137,12 @@ internal sealed partial class MacWindow
     }
     private void Agenda(int tab=0)
     {
+        var rows=new StackPanel{Spacing=8};
         var navigation=new WrapPanel();foreach(var item in new[]{("待办",0),("月历",1),("已完成",2)})navigation.Children.Add(B(item.Item1,()=>Agenda(item.Item2)));
         navigation.Children.Add(B("连接手机",()=>_=Safe(Phone)));navigation.Children.Add(B("导出 Markdown",()=>_=Safe(async()=>{var save=await StorageProvider.SaveFilePickerAsync(new(){SuggestedFileName="日程.md"});if(save!=null){await using var stream=await save.OpenWriteAsync();await using var writer=new StreamWriter(stream);await writer.WriteAsync(agenda.Markdown(DateTime.Today.AddYears(-10),DateTime.Today.AddYears(10)));}})));
         var panel=Stack(T("日程管理",24),navigation);DateTime? selected=null;
         if(tab==1){var calendar=new Calendar{SelectedDate=DateTime.Today};calendar.SelectedDatesChanged+=(_,_)=>Draw(calendar.SelectedDate);panel.Children.Add(calendar);selected=DateTime.Today;}
-        var rows=new StackPanel{Spacing=8};panel.Children.Add(rows);
+        panel.Children.Add(rows);
         void Draw(DateTime? day)
         {
             rows.Children.Clear();var tasks=agenda.Tasks().Where(t=>tab==2?t.Completed!=null:t.Completed==null).Where(t=>tab!=1||day!=null&&t.On(day.Value)).OrderBy(t=>t.Due??DateTimeOffset.MaxValue);

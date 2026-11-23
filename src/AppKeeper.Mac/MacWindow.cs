@@ -138,7 +138,7 @@ internal sealed partial class MacWindow : Window
     private void EnableDrag(Control control,string format,string value)
     {
         Point? down=null;control.PointerPressed+=(_,e)=>{if(e.GetCurrentPoint(control).Properties.IsLeftButtonPressed)down=e.GetPosition(control);};
-        control.PointerMoved+=async(_,e)=>{if(down is {} point&&e.GetCurrentPoint(control).Properties.IsLeftButtonPressed&&(e.GetPosition(control)-point).Length>7){down=null;var data=new DataObject();data.Set(format,value);await DragDrop.DoDragDrop(e,data,DragDropEffects.Move);}};control.PointerReleased+=(_,_)=>down=null;
+        control.PointerMoved+=async(_,e)=>{if(down is {} point&&e.GetCurrentPoint(control).Properties.IsLeftButtonPressed&&(Math.Abs(e.GetPosition(control).X-point.X)+Math.Abs(e.GetPosition(control).Y-point.Y))>7){down=null;var data=new DataObject();data.Set(format,value);await DragDrop.DoDragDrop(e,data,DragDropEffects.Move);}};control.PointerReleased+=(_,_)=>down=null;
     }
     private Entry? Dragged(DragEventArgs e)=>Guid.TryParse(e.Data.Get("entry") as string,out var id)?state.Data.Entries.Find(x=>x.Id==id):null;
     private void AddDropped(DragEventArgs e){foreach(var file in e.Data.GetFiles()??[]){var path=file.TryGetLocalPath();if(path!=null)state.Add(path,tag);}}

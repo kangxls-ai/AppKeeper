@@ -103,7 +103,7 @@ internal sealed class MacState
         if(File.Exists(file)) File.Copy(file,file+".bak",true);
         ModuleFiles.Write(file,Settings);
     }
-    internal void Import(string path) { var next = Library.Read(path); Data = next; Save(); }
+    internal void Import(string path) { var next = LibraryStore.Read(path); Data = next; Save(); }
     internal void Add(string path, string? tag, string? label = null)
     {
         var kind = WindowsCatalog.IsWeb(path) ? EntryKind.Web : Directory.Exists(path) && !path.EndsWith(".app",StringComparison.OrdinalIgnoreCase) ? EntryKind.Directory : EntryKind.File;
