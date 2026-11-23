@@ -36,10 +36,16 @@ public sealed class MacApp : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var state = new MacState(MacPlatform.Root);
+            if(MacPlatform.TestRoot!=null)
+            {
+                var sample=Path.Combine(state.Root,"示例资料.txt");File.WriteAllText(sample,"界面验收示例数据");state.Data.Tags.Add("办公");state.Add(sample,"办公");state.Visit(state.Data.Entries[0]);
+                ModuleFiles.Write(Path.Combine(state.Root,"AppKeeper.pigeon.json"),new PigeonData{Peers=[new("ui-peer","示例 Windows 电脑","127.0.0.2",1,"paired",false)],Items=[new(Guid.NewGuid(),"ui-peer",false,"text","中文消息与部分选择复制\n第二行",DateTimeOffset.Now,"saved",Unread:true),new(Guid.NewGuid(),"ui-peer",false,"file","示例资料.txt",DateTimeOffset.Now,"saved",Path:sample)]});
+            }
             try { instance = new FileStream(Path.Combine(state.Root,"instance.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None); }
             catch(IOException) { MacPlatform.Open(Path.Combine(AppContext.BaseDirectory,"..","..")); desktop.Shutdown(); return; }
             pigeon = new PigeonService(state.Root);
             var agenda = new AgendaStore(state.Root); sync = new AgendaLanSync(agenda,state.Root);
+            if(MacPlatform.TestRoot!=null)agenda.Append("create","ui-task",new{title="检查 Mac 界面与快捷键",category="验收",deadline=AgendaStore.Iso(DateTimeOffset.Now.AddHours(2)),deadlineHasTime=true});
             window = new MacWindow(state,pigeon,agenda,sync); desktop.MainWindow = window;
             ball = new FloatingWindow(state,()=>window.Reveal(true));
             window.PreferencesSaved += () => { UpdateHotkey(state); if(state.Settings.Ball)ball.Show();else ball.Hide(); };

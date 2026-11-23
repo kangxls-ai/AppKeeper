@@ -188,6 +188,15 @@ internal sealed partial class MacWindow : Window
             {
                 Navigate(name);await Task.Delay(80);
                 if(name=="快捷应用"){Apps();query.Text="jisuanqi";query.Text="";}
+                if(name=="飞鸽传书"&&pigeon.Peers().FirstOrDefault() is {} samplePeer)
+                {
+                    await ChoosePeer(samplePeer);RefreshChat();
+                    var message=chatMessages?.Children.OfType<Border>().FirstOrDefault()?.Child as StackPanel;
+                    if(message?.Children.FirstOrDefault() is not TextBox text)throw new Exception("聊天文字控件未创建。");
+                    text.SelectionStart=0;text.SelectionEnd=2;RefreshChat();
+                    if(text.SelectedText!="中文")throw new Exception("聊天文字部分选择未保留。");
+                }
+                if(name=="日程管理"){Agenda(1);await Task.Delay(80);Agenda();}
                 await Task.Delay(80);
                 if(!string.IsNullOrEmpty(output))
                 {

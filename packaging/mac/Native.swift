@@ -11,6 +11,8 @@ let arguments = CommandLine.arguments
 guard arguments.count >= 2 else { fail("缺少系统操作。") }
 switch arguments[1] {
 case "--hotkey":
+    let application = NSApplication.shared
+    application.setActivationPolicy(.prohibited)
     guard arguments.count == 4, let key = UInt32(arguments[2]), let modifiers = UInt32(arguments[3]) else { fail("快捷键无效。") }
     var kind = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
     let installed = InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
@@ -20,7 +22,7 @@ case "--hotkey":
     var ref: EventHotKeyRef?
     let status = RegisterEventHotKey(key, modifiers, EventHotKeyID(signature: 0x45414B50, id: 1), GetApplicationEventTarget(), 0, &ref)
     guard status == noErr else { fail("快捷键已被占用，请在偏好设置中更换。") }
-    RunApplicationEventLoop()
+    application.run()
 case "--scan":
     struct AppEntry: Codable { let Name: String; let Path: String; let Icon: String }
     let fm = FileManager.default
