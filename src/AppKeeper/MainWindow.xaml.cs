@@ -222,7 +222,7 @@ public partial class MainWindow : Window
         var columns = Math.Max(1, Math.Min(12, (int)(width / 112)));
         var rows = Math.Max(1, Math.Min(7, (int)(height / 104)));
         var size = columns * rows;
-        var matches = Layout.Visible(app.Data, inbox, Query, selectedTag).ToList();
+        var matches = LauncherLayout.Ordered(app.Data,Layout.Visible(app.Data, inbox, Query, selectedTag),LauncherLayout.Scope(selectedTag,null,inbox)).ToList();
         pages = Math.Max(1, (matches.Count + size - 1) / size);
         page = Math.Clamp(page, 0, pages - 1);
         Tiles.Columns = columns;
@@ -243,6 +243,7 @@ public partial class MainWindow : Window
 
     private Button Tile(Entry entry, bool insideFolder)
     {
+        var pinScope=insideFolder?PinScope:LauncherLayout.Scope(selectedTag,null,inbox);
         var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var tile = new Button
         {
@@ -255,13 +256,13 @@ public partial class MainWindow : Window
         stack.Children.Add(CreateTileIcon(entry));
         stack.Children.Add(new TextBlock
         {
-            Text = entry.Name, FontSize = 13, MaxWidth = 103, Margin = new Thickness(0, 7, 0, 0),
+            Text = (LauncherLayout.Pins(app.Data,pinScope).Contains(entry.Id)?"📌 ":"")+entry.Name, FontSize = 13, MaxWidth = 103, Margin = new Thickness(0, 7, 0, 0),
             TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis
         });
         if (entry.Missing)
             stack.Opacity = .55;
         tile.Click += (_, _) => ActivateEntry(entry);
-        tile.ContextMenu = MenuFor(entry);
+        tile.ContextMenu = MenuFor(entry,pinScope);
 
         EnableButtonDrag(tile, () => new DataObject(DragFormat, entry.Id.ToString()),
             DragDropEffects.Move | DragDropEffects.Link);
@@ -285,7 +286,9 @@ public partial class MainWindow : Window
                 if (Dragged(e) is not { } source)
                     return;
                 var action = DropPosition(tile, e, source, entry, insideFolder);
-                if (selectedTag is { } tag)
+                if(source.Id!=entry.Id&&LauncherLayout.Pins(app.Data,pinScope).Contains(source.Id)&&LauncherLayout.Pins(app.Data,pinScope).Contains(entry.Id)&&action!=DropAction.Into)
+                    app.Commit(library=>LauncherLayout.MovePin(library,pinScope,source.Id,entry.Id,action==DropAction.After));
+                else if (selectedTag is { } tag)
                     app.Commit(library => Layout.OrderInTag(library, tag, source, entry, action == DropAction.After));
                 else if (Layout.CanMove(source, entry, action))
                     app.Commit(library => Layout.Move(library, source, entry, action));
@@ -339,10 +342,11 @@ public partial class MainWindow : Window
         return frame;
     }
 
-    private ContextMenu MenuFor(Entry entry)
+    private ContextMenu MenuFor(Entry entry,string? pinScope=null)
     {
         var menu = new ContextMenu();
         AddItem(menu, entry.Kind == EntryKind.Group ? "打开文件夹" : "打开", () => ActivateEntry(entry));
+        AddLauncherPinActions(menu, entry,pinScope??PinScope);
         AddPinAction(menu, entry);
         AddItem(menu, "重命名", () =>
         {
@@ -448,7 +452,7 @@ public partial class MainWindow : Window
         FolderPanel.Width = Math.Max(200, Math.Min(535, ActualWidth - 64));
         FolderTiles.Columns = Math.Clamp((int)((FolderPanel.Width - 28) / 105), 1, 5);
         FolderScroller.MaxHeight = Math.Max(95, Math.Min(335, ActualHeight - 185));
-        foreach (var child in app.Data.Entries.Where(entry => entry.Group == folder.Id))
+        foreach (var child in LauncherLayout.Ordered(app.Data,app.Data.Entries.Where(entry => entry.Group == folder.Id),PinScope))
             FolderTiles.Children.Add(Tile(child, true));
         if (FolderTiles.Children.Count == 0)
             FolderTiles.Children.Add(new TextBlock { Text = "文件夹为空", Margin = new Thickness(8, 20, 0, 10) });
@@ -737,8 +741,9 @@ public partial class MainWindow : Window
             tagScrollTimer.Start();
     }
 
-    private void EnableTagDrop(Button button, string tag)
+    private void EnableTagDrop(Button button, LauncherLayout.Tab slot)
     {
+        var tag=slot.Name;
         bool After(DragEventArgs e) => e.GetPosition(button).X >= button.ActualWidth / 2;
         void Reset()
         {
@@ -752,7 +757,7 @@ public partial class MainWindow : Window
         {
             Reset();
             edgeTimer.Stop();
-            if (IsTagDrag(e) && draggedTag != tag)
+            if (IsTagDrag(e) && draggedTag != slot.Key)
             {
                 button.BorderBrush = Brushes.LightSkyBlue;
                 button.BorderThickness = After(e) ? new Thickness(1, 1, 3, 1) : new Thickness(3, 1, 1, 1);
@@ -773,38 +778,42 @@ public partial class MainWindow : Window
             e.Handled = true;
             tagScrollTimer.Stop();
             Reset();
-            if (IsTagDrag(e) && draggedTag != tag)
+            if (IsTagDrag(e) && draggedTag != slot.Key)
             {
                 var after = After(e);
-                app.Commit(library => Layout.MoveTag(library, draggedTag!, tag, after));
+                app.Commit(library => LauncherLayout.MoveTab(library, draggedTag!, slot.Key, after));
             }
             else if (Dragged(e) is { } entry)
             {
-                if (!entry.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
+                if (tag!=null&&!entry.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
                     app.Commit(library => Layout.AssignTag(library, entry, tag));
             }
             else if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
-                AddPaths(files, tag);
+            {
+                selectedTag=tag;AddPaths(files, tag);
+            }
         };
     }
 
     private void RenderTags()
     {
         TagBar.Children.Clear();
-        foreach (var tag in new string?[] { null }.Concat(app.Data.Tags))
+        foreach (var slot in LauncherLayout.Tabs(app.Data))
         {
+            var tag=slot.Name;
             var button = new Button { Content = tag ?? "全部", FontSize = 12,
                 Margin = new Thickness(0, 0, 5, 0), Padding = new Thickness(9, 4, 9, 4),
                 Background = tag == selectedTag ? activeBrush : Brushes.Transparent };
             button.Click += (_, _) => SelectTag(tag);
+            button.Tag=slot;
+            EnableButtonDrag(button, () =>
+            {
+                draggedTag = slot.Key;
+                return new DataObject(TagDragFormat, slot.Key);
+            }, DragDropEffects.Move);
+            EnableTagDrop(button, slot);
             if (tag != null)
             {
-                EnableButtonDrag(button, () =>
-                {
-                    draggedTag = tag;
-                    return new DataObject(TagDragFormat, tag);
-                }, DragDropEffects.Move);
-                EnableTagDrop(button, tag);
                 var menu = new ContextMenu();
                 AddItem(menu, "删除标签", () =>
                 {

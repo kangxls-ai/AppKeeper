@@ -39,6 +39,8 @@ internal sealed class Library
     public List<string> SearchHistory { get; set; } = [];
     public List<Guid> RecentEntries { get; set; } = [];
     public List<Guid> PinnedEntries { get; set; } = [];
+    public List<string> LauncherTagOrder { get; set; } = [];
+    public Dictionary<string,List<Guid>> LauncherPins { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 internal sealed record LauncherSize(double Width, double Height)
@@ -162,6 +164,7 @@ internal sealed class LibraryStore(string directory)
         data.RecentEntries = (data.RecentEntries ?? []).Where(ids.Contains).Distinct().Take(QuickHistory.EntryLimit).ToList();
         data.PinnedEntries = (data.PinnedEntries ?? []).Where(ids.Contains).Distinct().Take(QuickHistory.EntryLimit).ToList();
         Layout.EnsureTagOrders(data);
+        LauncherLayout.Normalize(data);
         return data;
     }
 
@@ -170,6 +173,7 @@ internal sealed class LibraryStore(string directory)
         var copy = JsonSerializer.Deserialize<Library>(JsonSerializer.SerializeToUtf8Bytes(data, Json), Json)!;
         copy.Ignored = new(copy.Ignored, StringComparer.OrdinalIgnoreCase);
         copy.TagOrders = new(copy.TagOrders ?? [], StringComparer.OrdinalIgnoreCase);
+        copy.LauncherPins = new(copy.LauncherPins ?? [], StringComparer.OrdinalIgnoreCase);
         return copy;
     }
 }

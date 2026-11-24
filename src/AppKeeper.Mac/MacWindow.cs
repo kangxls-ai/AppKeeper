@@ -22,6 +22,8 @@ internal sealed partial class MacWindow : Window
     private readonly ContentControl host=new();
     private readonly TextBlock notice=new(){TextWrapping=TextWrapping.Wrap,FontSize=12,MinHeight=18};
     private readonly Dictionary<string,Button> navigation=[];
+    private readonly TextBlock unreadText=new(){FontSize=10,FontWeight=FontWeight.SemiBold,Foreground=Brushes.White,VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center};
+    private readonly Border unreadBadge=new(){Background=new SolidColorBrush(Color.Parse("#e84d60")),CornerRadius=new CornerRadius(8),Height=16,MinWidth=18,Padding=new Thickness(4,0),HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Top,Margin=new Thickness(0,-9,0,0),IsHitTestVisible=false,IsVisible=false};
     private readonly TextBox query=new(){Watermark="搜索应用、拼音或首字母",MinHeight=40,MaxLength=256};
     private readonly WrapPanel tags=new(){Orientation=Orientation.Horizontal};
     private readonly WrapPanel tiles=new(){Orientation=Orientation.Horizontal};
@@ -58,7 +60,15 @@ internal sealed partial class MacWindow : Window
         UpdateAppearance();ActualThemeVariantChanged+=(_,_)=>UpdateAppearance();
         var shell=new Grid{ColumnDefinitions=new ColumnDefinitions("Auto,*"),RowDefinitions=new RowDefinitions("*,Auto"),Margin=new Thickness(8)};
         var rail=new StackPanel{Spacing=7,Width=112,Margin=new Thickness(0,20,12,0)};
-        foreach(var label in new[]{"快捷应用","最近访问","飞鸽传书","日程管理"}){var button=B(label,()=>Navigate(label));button.HorizontalAlignment=HorizontalAlignment.Stretch;navigation[label]=button;rail.Children.Add(button);}
+        foreach(var label in new[]{"快捷应用","最近访问","飞鸽传书","日程管理"})
+        {
+            var button=B(label,()=>Navigate(label));button.HorizontalAlignment=HorizontalAlignment.Stretch;navigation[label]=button;
+            if(label=="飞鸽传书")
+            {
+                button.Content=T(label,12);var slot=new Grid{ClipToBounds=false};slot.Children.Add(button);unreadBadge.Child=unreadText;slot.Children.Add(unreadBadge);rail.Children.Add(slot);
+            }
+            else rail.Children.Add(button);
+        }
         rail.Children.Add(B("偏好设置",Preferences));shell.Children.Add(rail);
         var content=new DockPanel{Margin=new Thickness(0,8,8,0)};DockPanel.SetDock(notice,Dock.Bottom);content.Children.Add(notice);content.Children.Add(host);Grid.SetColumn(content,1);shell.Children.Add(content);Content=shell;
         var credit=new TextBlock{Text="开发者 小李鱼 · 来信建议：kangxls@gmail.com",FontSize=11,Opacity=.7,TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center,HorizontalAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(4,8,4,2)};
@@ -114,13 +124,8 @@ internal sealed partial class MacWindow : Window
     }
     private void SetNavigationBadge(int count)
     {
-        var content=new Grid{RowDefinitions=new RowDefinitions("Auto,Auto")};content.Children.Add(T("飞鸽传书",12));
-        if(count>0)
-        {
-            var badge=new Border{Background=new SolidColorBrush(Color.Parse("#e84d60")),CornerRadius=new CornerRadius(9),Padding=new Thickness(5,1),MinHeight=18,MinWidth=20,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0,3,0,0),Child=new TextBlock{Text=PigeonUnread.Label(count),Foreground=Brushes.White,FontSize=11,HorizontalAlignment=HorizontalAlignment.Center}};
-            Grid.SetRow(badge,1);content.Children.Add(badge);
-        }
-        navigation["飞鸽传书"].Content=content;Avalonia.Automation.AutomationProperties.SetName(navigation["飞鸽传书"],count>0?$"飞鸽传书，{count} 条未读消息":"飞鸽传书");
+        unreadText.Text=PigeonUnread.Label(count);unreadBadge.IsVisible=count>0;
+        Avalonia.Automation.AutomationProperties.SetName(navigation["飞鸽传书"],count>0?$"飞鸽传书，{count} 条未读消息":"飞鸽传书");
     }
     private void Apps()
     {
@@ -213,7 +218,8 @@ internal sealed partial class MacWindow : Window
         var output=Environment.GetEnvironmentVariable("APPKEEPER_MAC_UI_DIR");
         await LauncherInputSmoke();
         await ExternalEntriesSmoke();
-        foreach(var width in new[]{1000,360})
+        await ActivationSmoke();
+        foreach(var width in new[]{1000,360,300})
         {
             Width=width;Height=720;await Task.Delay(150);
             foreach(var name in new[]{"快捷应用","最近访问","飞鸽传书","日程管理","快捷应用"})
@@ -231,12 +237,16 @@ internal sealed partial class MacWindow : Window
                 }
                 if(name=="日程管理"){Agenda(1);await Task.Delay(80);Agenda();}
                 await Task.Delay(80);
+                SetNavigationBadge(0);await Task.Delay(30);var originalButtonSize=navigation["飞鸽传书"].Bounds.Size;
                 foreach(var count in new[]{1,99,100})
                 {
                     SetNavigationBadge(count);await Task.Delay(30);
-                    var button=navigation["飞鸽传书"];var badge=((Grid)button.Content!).Children.OfType<Border>().Single();
-                    var position=badge.TranslatePoint(default,button)??throw new Exception("未读角标未挂载。");
-                    if(position.X<0||position.Y<0||position.X+badge.Bounds.Width>button.Bounds.Width||position.Y+badge.Bounds.Height>button.Bounds.Height)throw new Exception("未读角标超出菜单按钮。");
+                    var button=navigation["飞鸽传书"];if(button.Bounds.Size!=originalButtonSize)throw new Exception("未读数量撑大了菜单按钮。");
+                    var position=unreadBadge.TranslatePoint(default,this)??throw new Exception("未读角标未挂载。");
+                    var label=(TextBlock)button.Content!;var labelPosition=label.TranslatePoint(default,this)??throw new Exception("菜单文字未挂载。");
+                    if(position.X<0||position.Y<0||position.X+unreadBadge.Bounds.Width>Bounds.Width||position.Y+unreadBadge.Bounds.Height>Bounds.Height)throw new Exception("未读角标被窗口裁切。");
+                    if(new Rect(position,unreadBadge.Bounds.Size).Intersects(new Rect(labelPosition,label.Bounds.Size)))throw new Exception("未读角标遮挡菜单文字。");
+                    if(unreadText.Bounds.Height<unreadText.DesiredSize.Height||unreadText.Bounds.Width<unreadText.DesiredSize.Width)throw new Exception("未读数字未完整显示。");
                 }
                 if(!string.IsNullOrEmpty(output))
                 {

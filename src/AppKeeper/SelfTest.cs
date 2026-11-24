@@ -15,6 +15,7 @@ internal static class SelfTest
         try
         {
             EntryInboxSelfTest.Run(directory);
+            LauncherLayoutSelfTest.Run(directory);
             Check(Pinyin.Matches("微软计算器", "jisuan") && Pinyin.Matches("微软计算器", "wrjsq") &&
                 Pinyin.Matches("重庆银行", "chongqingyinhang") && Pinyin.Matches("终端 Terminal", "zdT") &&
                 Pinyin.Matches("画图", "画") && !Pinyin.Matches("画图", "calc"), "Chinese search");
@@ -99,7 +100,7 @@ internal static class SelfTest
             AgendaSyncSelfTest.Layout(directory);
             CheckPortableMigration(directory);
             System.Threading.Tasks.Task.Run(() => ModuleSelfTest.Run(directory)).GetAwaiter().GetResult();
-            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · independent tags, recent usage · Pigeon unread, partial text/file copy and transfer, MarkDo phone pairing and encrypted sync, Store migration");
+            WriteResult($"PASS · 500-entry pinyin search P95 {searchSamples[23]:F1} ms · movable All tab, scoped newest-first pins, independent tags, recent usage · Pigeon unread, partial text/file copy and transfer, MarkDo phone pairing and encrypted sync, Store migration");
             return 0;
         }
         catch (Exception error)

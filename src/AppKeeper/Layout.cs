@@ -118,6 +118,8 @@ internal static class Layout
     {
         EnsureTagOrders(library);
         library.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
+        library.LauncherTagOrder.RemoveAll(key=>key.Equals("tag:"+tag,StringComparison.OrdinalIgnoreCase));
+        library.LauncherPins.Remove("tag:"+tag);
         library.TagOrders.Remove(tag);
         foreach (var entry in library.Entries)
             entry.Tags.RemoveAll(value => value.Equals(tag, StringComparison.OrdinalIgnoreCase));
@@ -191,6 +193,8 @@ internal static class Layout
         library.Entries.Remove(entry);
         library.RecentEntries.Remove(entry.Id);
         library.PinnedEntries.Remove(entry.Id);
+        foreach(var pins in library.LauncherPins.Values)pins.Remove(entry.Id);
+        library.LauncherPins.Remove("folder:"+entry.Id);
         foreach (var order in library.TagOrders.Values) order.Remove(entry.Id);
     }
 }

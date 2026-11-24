@@ -7,10 +7,10 @@
     <DefineConstants>$(DefineConstants);MAC</DefineConstants>
     <AssemblyName>EasyAppKeeper</AssemblyName>
     <RootNamespace>AppKeeper</RootNamespace>
-    <Version>1.4.3</Version>
+    <Version>1.4.4</Version>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../AppKeeper/EntryInbox.cs;../AppKeeper/EntryInboxSelfTest.cs" Link="Shared/%(Filename)%(Extension)" />
+    <Compile Include="../AppKeeper/EntryInbox.cs;../AppKeeper/EntryInboxSelfTest.cs;../AppKeeper/LauncherLayout.cs" Link="Shared/%(Filename)%(Extension)" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />

@@ -40,7 +40,7 @@ internal static class Program
 
 public sealed class MacApp : Application
 {
-    private TrayIcon? tray;
+    private MacStatusBar? statusBar;
     private Process? hotkey;
     private MacWindow? window;
     private FloatingWindow? ball;
@@ -72,17 +72,17 @@ public sealed class MacApp : Application
             var agenda = new AgendaStore(state.Root); sync = new AgendaLanSync(agenda,state.Root);
             if(MacPlatform.TestRoot!=null)agenda.Append("create","ui-task",new{title="检查 Mac 界面与快捷键",category="验收",deadline=AgendaStore.Iso(DateTimeOffset.Now.AddHours(2)),deadlineHasTime=true});
             window = new MacWindow(state,pigeon,agenda,sync); desktop.MainWindow = window;
+            if(this.TryGetFeature(typeof(IActivatableLifetime)) is IActivatableLifetime lifetime)
+                lifetime.Activated+=(_,e)=>{if(e.Kind==ActivationKind.Reopen)ShowHome();};
             if(MacPlatform.TestRoot==null)_=ConfigureFinder();
             ball = new FloatingWindow(state,()=>window.Reveal(true));
             window.PreferencesSaved += () => { UpdateHotkey(state); if(state.Settings.Ball)ball.Show();else ball.Hide(); };
-            var menu = new NativeMenu();
-            var open = new NativeMenuItem("打开快捷应用"); open.Click += (_,_)=>window.Reveal(true); menu.Items.Add(open);
-            var prefs = new NativeMenuItem("偏好设置…"); prefs.Click += (_,_)=>{window.Reveal();window.Preferences();}; menu.Items.Add(prefs);
-            menu.Items.Add(new NativeMenuItemSeparator());
-            var quit = new NativeMenuItem("退出 EasyAppKeeper"); quit.Click += (_,_)=>desktop.Shutdown(); menu.Items.Add(quit);
-            using var icon = Avalonia.Platform.AssetLoader.Open(new Uri("avares://EasyAppKeeper/Assets/AppKeeper.ico"));
-            tray = new TrayIcon { Icon = new WindowIcon(icon), ToolTipText="EasyAppKeeper", Menu=menu, IsVisible=true };
-            tray.Clicked += (_,_)=>window.Reveal(true); TrayIcon.SetIcons(this,new TrayIcons { tray });
+            statusBar=new MacStatusBar(command=>
+            {
+                if(command==1)ShowHome();
+                else if(command==2){ShowHome();window.Preferences();}
+                else if(command==3)desktop.Shutdown();
+            });
             UpdateHotkey(state);
             if(state.Settings.Ball) ball.Show();
             if(!desktop.Args!.Contains("--background")) window.Show();
@@ -93,11 +93,15 @@ public sealed class MacApp : Application
                 catch(Exception e){Console.Error.WriteLine(e);desktop.Shutdown(1);}
             });
             else _ = window.ScanApps();
-            desktop.Exit += (_,_)=> { window.FinalClose=true;ball.FinalClose=true;hotkey?.Kill();hotkey?.Dispose();tray.Dispose();sync.Dispose();pigeon.Dispose();instance.Dispose(); };
+            desktop.Exit += (_,_)=> { window.FinalClose=true;ball.FinalClose=true;hotkey?.Kill();hotkey?.Dispose();statusBar.Dispose();sync.Dispose();pigeon.Dispose();instance.Dispose(); };
         }
         base.OnFrameworkInitializationCompleted();
     }
     private async Task StartSync() { try { await sync!.StartAsync(); } catch(Exception e) { Dispatcher.UIThread.Post(()=>window!.Status(e.Message)); } }
+    private void ShowHome()
+    {
+        (this.TryGetFeature(typeof(IActivatableLifetime)) as IActivatableLifetime)?.TryLeaveBackground();window?.Reveal(true);
+    }
     private async Task ConfigureFinder(){try{await window!.ApplyFinderIntegration();}catch(Exception e){window!.Status("访达右键设置失败："+e.Message);}}
     private void UpdateHotkey(MacState state)
     {
