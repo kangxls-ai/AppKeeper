@@ -73,7 +73,14 @@ internal sealed partial class MacWindow : Window
         var content=new DockPanel{Margin=new Thickness(0,8,8,0)};DockPanel.SetDock(notice,Dock.Bottom);content.Children.Add(notice);content.Children.Add(host);Grid.SetColumn(content,1);shell.Children.Add(content);Content=shell;
         var credit=new TextBlock{Text="开发者 小李鱼 · 来信建议：kangxls@gmail.com",FontSize=11,Opacity=.7,TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center,HorizontalAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(4,8,4,2)};
         Grid.SetRow(credit,1);Grid.SetColumnSpan(credit,2);shell.Children.Add(credit);
-        Closing+=(_,e)=>{if(!FinalClose){e.Cancel=true;Hide();pigeon.SetReadingPeer(null);state.Save();}};
+        Closing+=(_,e)=>
+        {
+            if(!FinalClose&&e.CloseReason is not (WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown))
+            {
+                e.Cancel=true;Hide();pigeon.SetReadingPeer(null);
+                try{state.Save();}catch(Exception error){Status("配置保存失败："+error.Message);}
+            }
+        };
         Deactivated+=(_,_)=>pigeon.SetReadingPeer(null);
         Activated+=(_,_)=>RefreshChat();
         PropertyChanged+=(_,e)=>{if(e.Property==WindowStateProperty){if(WindowState==WindowState.Minimized)pigeon.SetReadingPeer(null);} };
@@ -93,11 +100,12 @@ internal sealed partial class MacWindow : Window
     private static Button Button(string label,Action action){var b=new Button{Content=label,Padding=new Thickness(10,7)};if(label is "发送" or "快速添加" or "确定" or "＋ 添加")b.Classes.Add("primary");b.Click+=(_,_)=>action();return b;}
     private async void Run(Action action){try{action();}catch(Exception e){await Alert(e.Message);}}
     private async Task Safe(Func<Task> action){try{await action();}catch(Exception e){if(MacPlatform.TestRoot!=null)throw;await Alert(e.Message);}}
-    private async Task Alert(string message)=>await Dialog("提示",[T(message)],false);
+    private async Task Alert(string message){if(FinalClose){System.Diagnostics.Trace.TraceWarning(message);return;}await Dialog("提示",[T(message)],false);}
     private StackPanel Stack(params Control[] children){var panel=new StackPanel{Spacing=12};foreach(var c in children)panel.Children.Add(c);return panel;}
     private Control Scroll(Control control)=>new ScrollViewer{Content=control,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};
     private async Task<bool> Dialog(string title,IEnumerable<Control> fields,bool confirm=true)
     {
+        if(FinalClose)return false;
         var window=new Window{Title=title,Width=460,MinWidth=300,MaxHeight=720,SizeToContent=SizeToContent.Height,WindowStartupLocation=WindowStartupLocation.CenterOwner};
         var panel=new StackPanel{Spacing=12,Margin=new Thickness(20)};foreach(var field in fields)panel.Children.Add(field);
         var buttons=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8,HorizontalAlignment=HorizontalAlignment.Right};

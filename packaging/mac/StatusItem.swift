@@ -58,3 +58,10 @@ public func testDockReopen() -> Int32 {
     let app = NSApplication.shared
     return app.delegate?.applicationShouldHandleReopen?(app, hasVisibleWindows: app.windows.contains(where: { $0.isVisible })) == nil ? 0 : 1
 }
+// Calls only this application's termination delegate; never shuts down the computer.
+@_cdecl("EasyAppKeeperTestTermination")
+public func testTermination() -> Int32 {
+    let app = NSApplication.shared
+    guard let reply = app.delegate?.applicationShouldTerminate?(app) else { return -1 }
+    return Int32(reply.rawValue)
+}

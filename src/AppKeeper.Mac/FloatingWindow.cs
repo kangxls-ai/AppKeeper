@@ -20,7 +20,12 @@ internal sealed class FloatingWindow : Window
         PointerPressed+=(_,e)=>{if(e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)BeginMoveDrag(e);};PointerEntered+=(_,_)=>open();
         PositionChanged+=(_,_)=>{if(!docking){timer.Stop();timer.Start();}};timer.Tick+=(_,_)=>{timer.Stop();Dock();};
         Opened+=(_,_)=>{var area=(Screens.ScreenFromPoint(new PixelPoint(state.Settings.BallX,state.Settings.BallY))??Screens.Primary)?.WorkingArea;if(area is {} a){docking=true;Position=state.Settings.HasBallPosition?new PixelPoint(Math.Clamp(state.Settings.BallX,a.X-20,a.Right-24),Math.Clamp(state.Settings.BallY,a.Y,a.Bottom-44)):new PixelPoint(a.Right-24,a.Y+a.Height/2);docking=false;}};
-        Closing+=(_,e)=>{if(!FinalClose){e.Cancel=true;Hide();}};
+        Closing+=(_,e)=>{if(!FinalClose&&e.CloseReason is not (WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown)){e.Cancel=true;Hide();}};
+    }
+    internal void PrepareShutdown()
+    {
+        FinalClose=true;timer.Stop();
+        if(IsVisible){state.Settings.BallX=Position.X;state.Settings.BallY=Position.Y;state.Settings.HasBallPosition=true;}
     }
     private void Dock()
     {

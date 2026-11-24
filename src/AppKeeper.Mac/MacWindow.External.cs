@@ -20,7 +20,7 @@ internal sealed partial class MacWindow
     }
     private async Task DrainExternalEntries()
     {
-        if(addingEntries)return;
+        if(addingEntries||FinalClose)return;
         var inbox=new EntryInbox(state.Root);
         try
         {
@@ -34,7 +34,9 @@ internal sealed partial class MacWindow
             var newTag=new TextBox{Watermark="新建标签（可选，最多 24 字）",MaxLength=24};
             var list=new ListBox{ItemsSource=paths.Select(path=>Path.GetFileName(Path.TrimEndingDirectorySeparator(path))).ToArray(),MaxHeight=180};
             var fields=new Control[]{T($"添加 {paths.Length} 个入口",20),list,T("添加到标签",12),tags,newTag,T("仅创建快捷入口，原文件保留原位；已有入口自动关联标签。",12)};
-            if(!await Dialog("添加到 EasyAppKeeper",fields)){inbox.Complete(batch);return;}
+            var confirmed=await Dialog("添加到 EasyAppKeeper",fields);
+            if(FinalClose)return; // System quit closes the dialog; it is not a user's cancellation.
+            if(!confirmed){inbox.Complete(batch);return;}
             var value=newTag.Text?.Trim()??"";
             if(value.Length>0&&!Layout.IsTagName(value))throw new ArgumentException("标签名称无效，请重试。待处理请求仍保留。");
             var destination=value.Length>0?state.Data.Tags.FirstOrDefault(t=>t.Equals(value,StringComparison.OrdinalIgnoreCase))??value:tags.SelectedIndex>0?state.Data.Tags[tags.SelectedIndex-1]:null;

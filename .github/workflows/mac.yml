@@ -51,6 +51,13 @@ jobs:
           name: EasyAppKeeper-mac-ui
           path: artifacts/mac/ui/*.png
           if-no-files-found: warn
+      - name: Verify native quit accepts system termination without shutting down runner
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          for mode in visible hidden dialog storage-error explicit; do
+            artifacts/mac/EasyAppKeeper.app/Contents/MacOS/EasyAppKeeper --shutdown-smoke "$mode" | tee -a artifacts/mac/shutdown-test.txt
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: EasyAppKeeper-mac-arm64
@@ -58,5 +65,6 @@ jobs:
             artifacts/mac/*.zip
             artifacts/mac/*.dmg
             artifacts/mac/self-test.txt
+            artifacts/mac/shutdown-test.txt
             artifacts/mac/ui/*.png
           if-no-files-found: error

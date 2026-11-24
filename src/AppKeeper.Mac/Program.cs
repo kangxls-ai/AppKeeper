@@ -14,11 +14,12 @@ namespace AppKeeper;
 
 internal static class Program
 {
+    internal static int SmokeFailure;
     [STAThread]
     internal static int Main(string[] args)
     {
         if (args.Contains("--self-test")) return MacSelfTest.Run().GetAwaiter().GetResult();
-        if (args.Contains("--ui-smoke")) MacPlatform.TestRoot=Path.Combine(Path.GetTempPath(),"EasyAppKeeper-ui-"+Guid.NewGuid().ToString("N"));
+        if (args.Contains("--ui-smoke")||args.Contains("--shutdown-smoke")) MacPlatform.TestRoot=Path.Combine(Path.GetTempPath(),"EasyAppKeeper-ui-"+Guid.NewGuid().ToString("N"));
         if (!OperatingSystem.IsMacOS()) { Console.Error.WriteLine("EasyAppKeeper Mac 需要 macOS；可使用 --self-test 运行共享逻辑检查。"); return 1; }
         try
         {
@@ -31,14 +32,15 @@ internal static class Program
             }
         }
         catch(Exception error) when(error is IOException or UnauthorizedAccessException or ArgumentException){Console.Error.WriteLine(error.Message);return 1;}
-        var software=args.Contains("--software-rendering")||args.Contains("--ui-smoke");
-        return AppBuilder.Configure<MacApp>().UsePlatformDetect()
+        var software=args.Contains("--software-rendering")||args.Contains("--ui-smoke")||args.Contains("--shutdown-smoke");
+        var result=AppBuilder.Configure<MacApp>().UsePlatformDetect()
             .With(new AvaloniaNativePlatformOptions{AppSandboxEnabled=false,RenderingMode=software?[AvaloniaNativeRenderingMode.Software]:[AvaloniaNativeRenderingMode.Metal,AvaloniaNativeRenderingMode.OpenGl,AvaloniaNativeRenderingMode.Software]})
             .LogToTrace().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+        return SmokeFailure!=0?SmokeFailure:result;
     }
 }
 
-public sealed class MacApp : Application
+public sealed partial class MacApp : Application
 {
     private MacStatusBar? statusBar;
     private Process? hotkey;
@@ -49,6 +51,7 @@ public sealed class MacApp : Application
     private FileStream? instance;
     public override void Initialize()
     {
+        Name="EasyAppKeeper";
         Styles.Add(new FluentTheme());
         Resources.ThemeDictionaries[ThemeVariant.Light]=new ResourceDictionary{{"MacControl",new SolidColorBrush(Color.Parse("#ffffff"))},{"MacLine",new SolidColorBrush(Color.Parse("#dce3ee"))}};
         Resources.ThemeDictionaries[ThemeVariant.Dark]=new ResourceDictionary{{"MacControl",new SolidColorBrush(Color.Parse("#2b374c"))},{"MacLine",new SolidColorBrush(Color.Parse("#3a4961"))}};
@@ -76,30 +79,37 @@ public sealed class MacApp : Application
                 lifetime.Activated+=(_,e)=>{if(e.Kind==ActivationKind.Reopen)ShowHome();};
             if(MacPlatform.TestRoot==null)_=ConfigureFinder();
             ball = new FloatingWindow(state,()=>window.Reveal(true));
+            desktop.ShutdownRequested+=(_,_)=>PrepareShutdown();
             window.PreferencesSaved += () => { UpdateHotkey(state); if(state.Settings.Ball)ball.Show();else ball.Hide(); };
             statusBar=new MacStatusBar(command=>
             {
                 if(command==1)ShowHome();
                 else if(command==2){ShowHome();window.Preferences();}
-                else if(command==3)desktop.Shutdown();
+                else if(command==3){PrepareShutdown();desktop.Shutdown();}
             });
             UpdateHotkey(state);
             if(state.Settings.Ball) ball.Show();
             if(!desktop.Args!.Contains("--background")) window.Show();
             _ = StartSync();
-            if(desktop.Args.Contains("--ui-smoke")) Dispatcher.UIThread.Post(async()=>
+            if(desktop.Args.Contains("--shutdown-smoke"))Dispatcher.UIThread.Post(async()=>
+            {
+                try{await ShutdownSmoke(desktop,state);}
+                catch(Exception error){Program.SmokeFailure=1;Console.Error.WriteLine(error);desktop.Shutdown(1);}
+            });
+            else if(desktop.Args.Contains("--ui-smoke")) Dispatcher.UIThread.Post(async()=>
             {
                 try { Console.WriteLine("UI: starting application scan");await window.ScanApps();Console.WriteLine("UI: scan complete");await window.Smoke();Console.WriteLine("PASS: Mac desktop view navigation, repeated launcher rendering, narrow/wide layouts and screenshots");desktop.Shutdown(0); }
                 catch(Exception e){Console.Error.WriteLine(e);desktop.Shutdown(1);}
             });
             else _ = window.ScanApps();
-            desktop.Exit += (_,_)=> { window.FinalClose=true;ball.FinalClose=true;hotkey?.Kill();hotkey?.Dispose();statusBar.Dispose();sync.Dispose();pigeon.Dispose();instance.Dispose(); };
+            desktop.Exit += (_,_)=> { PrepareShutdown();CleanupServices(); };
         }
         base.OnFrameworkInitializationCompleted();
     }
     private async Task StartSync() { try { await sync!.StartAsync(); } catch(Exception e) { Dispatcher.UIThread.Post(()=>window!.Status(e.Message)); } }
     private void ShowHome()
     {
+        if(shuttingDown)return;
         (this.TryGetFeature(typeof(IActivatableLifetime)) as IActivatableLifetime)?.TryLeaveBackground();window?.Reveal(true);
     }
     private async Task ConfigureFinder(){try{await window!.ApplyFinderIntegration();}catch(Exception e){window!.Status("访达右键设置失败："+e.Message);}}
