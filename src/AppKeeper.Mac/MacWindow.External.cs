@@ -49,7 +49,7 @@ internal sealed partial class MacWindow
             catch(Exception error){System.Diagnostics.Trace.TraceWarning("入口已创建，部分图标暂未读取："+error.Message);}
             state.Save();inbox.Complete(batch);Navigate("快捷应用");tag=destination;query.Clear();Apps();Status($"已添加或关联 {paths.Length} 个入口");
         }
-        catch(Exception e) when(e is IOException or UnauthorizedAccessException){entryTimer.Stop();throw new IOException("添加入口失败。待处理请求已保留，检查目录权限后重新启动即可重试。",e);}
+        catch(Exception e) when(e is IOException or UnauthorizedAccessException or ArgumentException){entryTimer.Stop();throw new IOException("添加入口失败："+e.Message+" 待处理请求已保留，修正后重新启动即可重试。",e);}
         finally{addingEntries=false;}
     }
 }

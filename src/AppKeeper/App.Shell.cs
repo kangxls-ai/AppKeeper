@@ -43,6 +43,7 @@ public partial class App
                 Inbox.Complete(batch);GetLauncher().ShowExternalEntries(choice.Length==0?null:choice);
                 notice=$"已添加或关联 {entries.Length} 个入口。";launcher?.RefreshStatus();
             }
+            else entryTimer?.Stop();
         }
         catch(Exception e) when(e is IOException or UnauthorizedAccessException or ArgumentException){Error("添加入口失败，待处理请求已保留："+e.Message);entryTimer?.Stop();}
         finally{addingEntries=false;}

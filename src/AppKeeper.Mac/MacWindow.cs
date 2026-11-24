@@ -212,6 +212,7 @@ internal sealed partial class MacWindow : Window
     {
         var output=Environment.GetEnvironmentVariable("APPKEEPER_MAC_UI_DIR");
         await LauncherInputSmoke();
+        await ExternalEntriesSmoke();
         foreach(var width in new[]{1000,360})
         {
             Width=width;Height=720;await Task.Delay(150);

@@ -25,7 +25,8 @@ static int confirm(const wchar_t* tag)
             if(tag&&*tag)
             {
                 auto id=condition(ui.Get(),UIA_AutomationIdPropertyId,L"ExternalNewTag");ComPtr<IUIAutomationElement> input;dialog->FindFirst(TreeScope_Descendants,id.Get(),&input);
-                ComPtr<IUIAutomationValuePattern> value;if(!input||FAILED(input->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&value)))||FAILED(value->SetValue(tag)))return 21;
+                ComPtr<IUIAutomationValuePattern> value;if(!input||FAILED(input->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&value))))return 21;
+                auto text=SysAllocString(tag);auto changed=value->SetValue(text);SysFreeString(text);if(FAILED(changed))return 21;
             }
             auto name=condition(ui.Get(),UIA_NamePropertyId,L"添加入口");ComPtr<IUIAutomationElement> button;dialog->FindFirst(TreeScope_Descendants,name.Get(),&button);
             ComPtr<IUIAutomationInvokePattern> invoke;if(!button||FAILED(button->GetCurrentPatternAs(UIA_InvokePatternId,IID_PPV_ARGS(&invoke))))return 22;
