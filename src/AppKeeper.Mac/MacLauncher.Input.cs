@@ -11,7 +11,7 @@ internal sealed partial class MacWindow
 {
     private bool dragging;
     private readonly MacPageGesture gesture=new();
-    private readonly ScrollViewer gridViewport=new(){Background=Brushes.Transparent,HorizontalScrollBarVisibility=Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,VerticalScrollBarVisibility=Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled};
+    private readonly ScrollViewer gridViewport=new(){Background=Brushes.Transparent,HorizontalScrollBarVisibility=Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,VerticalScrollBarVisibility=Avalonia.Controls.Primitives.ScrollBarVisibility.Auto};
     private string PinScope=>MacLauncher.Scope(tag,folder);
     private void ConfigureLauncherInput()
     {
@@ -33,12 +33,12 @@ internal sealed partial class MacWindow
         },RoutingStrategies.Bubble,true);
         host.AddHandler(DragDrop.DropEvent,TileBlankDrop);
         tiles.Background=Brushes.Transparent;
-        gridViewport.SizeChanged+=(_,_)=>{var size=MacLauncher.Capacity(gridViewport.Bounds.Width,gridViewport.Bounds.Height);if(size!=pageSize){pageSize=size;RenderTiles();}};
         gridViewport.AddHandler(PointerWheelChangedEvent,(_,e)=>
         {
             if(section!="快捷应用"||e.KeyModifiers!=KeyModifiers.None)return;
-            if(Math.Abs(e.Delta.Y)<Math.Abs(e.Delta.X))return;
-            var delta=gesture.Update(e.Delta.X,e.Delta.Y,Environment.TickCount64);e.Handled=true;
+            var delta=gesture.Update(e.Delta.X,e.Delta.Y,Environment.TickCount64);
+            if(Math.Abs(e.Delta.X)<=Math.Abs(e.Delta.Y))return;
+            e.Handled=true;
             if(delta!=0){page+=delta;RenderTiles();}
         },RoutingStrategies.Tunnel,true);
     }

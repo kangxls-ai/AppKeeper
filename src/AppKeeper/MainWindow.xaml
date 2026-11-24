@@ -26,7 +26,7 @@
             </LinearGradientBrush>
         </Border.Background>
         <Grid x:Name="Root" Margin="10,6,10,6">
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
             <DockPanel Background="Transparent" Height="37" MouseLeftButtonDown="MoveWindow">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Content="−" Click="MinimizeWindow" ToolTip="最小化" AutomationProperties.Name="最小化" Padding="9,3"/>
@@ -156,7 +156,9 @@
             </Grid>
                 </Grid>
             </Grid>
-            <Thumb x:Name="ResizeThumb" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="17" Height="17" Cursor="SizeNWSE"
+            <TextBlock Grid.Row="2" Text="开发者 小李鱼 · 来信建议：kangxls@gmail.com" FontSize="11"
+                       Foreground="{StaticResource Secondary}" TextWrapping="Wrap" TextAlignment="Center" Margin="5,4,5,2"/>
+            <Thumb x:Name="ResizeThumb" Grid.Row="1" Grid.RowSpan="2" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="17" Height="17" Cursor="SizeNWSE"
                    DragDelta="ResizeWindow" DragCompleted="FinishResize" AutomationProperties.Name="调整窗口大小">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">

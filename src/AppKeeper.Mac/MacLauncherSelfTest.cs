@@ -24,11 +24,11 @@ internal static class MacLauncherSelfTest
         var restored=new MacState(state.Root);Check(MacLauncher.Ordered(restored,restored.Data.Entries,all)[0].Id==entries[0].Id,"pins survive restart");
         MacLauncher.Pin(state,all,entries[0].Id,false);Check(MacLauncher.Ordered(state,entries,all)[0].Id==entries[2].Id,"unpin keeps other pins");
         using var payload=MacLauncher.Transfer("entry",entries[0].Id.ToString());Check(MacLauncher.Effect(payload)==Avalonia.Input.DragDropEffects.Move,"internal drag advertises move");
-        var gesture=new MacPageGesture();Check(gesture.Update(0,-.4,1000)==0&&gesture.Update(0,-.7,1010)==1,"small touchpad deltas accumulate to one page");
-        for(var n=1;n<=20;n++)Check(gesture.Update(0,-3,1010+n*30)==0,"inertia cannot skip multiple pages");
-        Check(gesture.Update(0,1,2000)==-1,"next separate gesture may go back");
-        gesture.Reset();Check(gesture.Update(3,.2,3000)==0,"horizontal gestures ignored");
-        Check(MacLauncher.Capacity(850,350)==21&&MacLauncher.Capacity(190,180)==1,"page capacity fits the visible grid");
+        var gesture=new MacPageGesture();Check(gesture.Update(-.4,0,1000)==0&&gesture.Update(-.7,0,1010)==1,"small horizontal touchpad deltas accumulate to one page");
+        for(var n=1;n<=20;n++)Check(gesture.Update(-3,0,1010+n*30)==0,"inertia cannot skip multiple pages");
+        Check(gesture.Update(1,0,2000)==-1,"next separate gesture may go back");
+        gesture.Reset();Check(gesture.Update(.2,-3,3000)==0,"vertical gestures scroll without paging");
+        Check(MacLauncher.PageSize==50,"fixed fifty entry pages at every window size");
         Check(File.ReadAllText(file)=="keep original","creating entries does not change source file");
         var unnamed=state.Data.Entries.Single(e=>e.Target==folder);unnamed.Name="";unnamed.Target+=Path.DirectorySeparatorChar;
         ModuleFiles.Write(state.Store.DataPath,state.Data);

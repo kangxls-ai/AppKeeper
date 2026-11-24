@@ -54,11 +54,28 @@ internal sealed partial class MacWindow
         MacLauncher.Pin(state,PinScope,source.Id,false);MacLauncher.Pin(state,PinScope,destination.Id,false);query.Clear();page=0;RenderTiles();await Task.Delay(80);
         if(VisibleEntries().Length<=pageSize)throw new Exception("翻页验收需要多页入口。");
         using var pointer=new Pointer(Pointer.GetNextFreeId(),PointerType.Mouse,true);
-        void Wheel(double y)=>gridViewport.RaiseEvent(new PointerWheelEventArgs(gridViewport,pointer,this,new Point(200,300),0,new PointerPointProperties(),KeyModifiers.None,new Vector(0,y)));
-        gesture.Reset();Wheel(-1);for(var n=0;n<6;n++)Wheel(-1);
+        void Wheel(double x,double y)=>tiles.RaiseEvent(new PointerWheelEventArgs(tiles,pointer,this,new Point(200,300),0,new PointerPointProperties(),KeyModifiers.None,new Vector(x,y)));
+        gesture.Reset();Wheel(-1,0);for(var n=0;n<6;n++)Wheel(-1,0);
         if(page!=1)throw new Exception("双指滚动惯性导致漏翻页或多翻页。");
-        await Task.Delay(300);Wheel(1);if(page!=0)throw new Exception("反向手势未返回上一页。");
+        await Task.Delay(300);Wheel(1,0);if(page!=0)throw new Exception("反向手势未返回上一页。");
+        var fixtures=Enumerable.Range(1,103).Select(n=>new Entry{Name=$"滚动验收 {n}",Target=$"https://example.com/{n}",Kind=EntryKind.Web,Tags=[targetTag]}).ToArray();
+        state.Data.Entries.AddRange(fixtures);tag=targetTag;query.Text="滚动验收";page=0;Apps();
+        foreach(var width in new[]{1000,360})
+        {
+            Width=width;await Task.Delay(100);page=0;RenderTiles();await Task.Delay(80);
+            if(tiles.Children.Count!=50||pageNumber.Text!="1 / 3")throw new Exception("每页未固定展示 50 个入口。");
+            if(gridViewport.Extent.Height<=gridViewport.Viewport.Height)throw new Exception("50 个入口未产生可滚动区域。");
+            Wheel(0,-3);await Task.Delay(60);
+            if(page!=0||gridViewport.Offset.Y<=0)throw new Exception("纵向手势未滚动或误触发翻页。");
+            tiles.Children.Last().BringIntoView();await Task.Delay(80);
+            if(gridViewport.Offset.Y<=0)throw new Exception("页面底部入口不可滚动访问。");
+            await Task.Delay(300);Wheel(-1,0);await Task.Delay(80);
+            if(page!=1||tiles.Children.Count!=50||gridViewport.Offset.Y!=0)throw new Exception("横向翻页未展示接下来的 50 项或未回到顶部。");
+            await Task.Delay(300);Wheel(-1,0);await Task.Delay(80);
+            if(page!=2||tiles.Children.Count!=3)throw new Exception("最后一页入口数量错误。");
+        }
+        state.Data.Entries.RemoveAll(e=>fixtures.Any(f=>f.Id==e.Id));tag=null;query.Clear();page=0;state.Save();Apps();
         var restored=new MacState(state.Root);if(restored.Data.Entries.Count(e=>e.Target==file)!=1)throw new Exception("投放入口重启后丢失。");
-        Console.WriteLine("PASS: routed file/folder/app drops, automatic folder names, batch/dedup/tag assignment, movable All tab, tile sorting, newest pin and wheel pagination/inertia");
+        Console.WriteLine("PASS: routed Finder drops, names, tag sorting, pins; 50/50/3 entry pages at wide/narrow widths, vertical scroll and horizontal pagination/inertia");
     }
 }

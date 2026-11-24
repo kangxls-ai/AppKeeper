@@ -35,7 +35,7 @@ internal sealed partial class MacWindow : Window
     private Guid? folder;
     private int page;
     private string? peer;
-    private int pageSize=24;
+    private const int pageSize=MacLauncher.PageSize;
     private readonly DispatcherTimer poll=new(){Interval=TimeSpan.FromMilliseconds(750)};
     private string chatStamp="";
     private StackPanel? peerList;
@@ -56,11 +56,13 @@ internal sealed partial class MacWindow : Window
         TransparencyLevelHint=[WindowTransparencyLevel.AcrylicBlur,WindowTransparencyLevel.Transparent];
         void UpdateAppearance()=>Background=new SolidColorBrush(Application.Current?.ActualThemeVariant==Avalonia.Styling.ThemeVariant.Dark?Color.FromArgb(234,28,36,51):Color.FromArgb(234,245,248,252));
         UpdateAppearance();ActualThemeVariantChanged+=(_,_)=>UpdateAppearance();
-        var shell=new Grid{ColumnDefinitions=new ColumnDefinitions("Auto,*"),Margin=new Thickness(8)};
+        var shell=new Grid{ColumnDefinitions=new ColumnDefinitions("Auto,*"),RowDefinitions=new RowDefinitions("*,Auto"),Margin=new Thickness(8)};
         var rail=new StackPanel{Spacing=7,Width=112,Margin=new Thickness(0,20,12,0)};
         foreach(var label in new[]{"快捷应用","最近访问","飞鸽传书","日程管理"}){var button=B(label,()=>Navigate(label));button.HorizontalAlignment=HorizontalAlignment.Stretch;navigation[label]=button;rail.Children.Add(button);}
         rail.Children.Add(B("偏好设置",Preferences));shell.Children.Add(rail);
         var content=new DockPanel{Margin=new Thickness(0,8,8,0)};DockPanel.SetDock(notice,Dock.Bottom);content.Children.Add(notice);content.Children.Add(host);Grid.SetColumn(content,1);shell.Children.Add(content);Content=shell;
+        var credit=new TextBlock{Text="开发者 小李鱼 · 来信建议：kangxls@gmail.com",FontSize=11,Opacity=.7,TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center,HorizontalAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(4,8,4,2)};
+        Grid.SetRow(credit,1);Grid.SetColumnSpan(credit,2);shell.Children.Add(credit);
         Closing+=(_,e)=>{if(!FinalClose){e.Cancel=true;Hide();pigeon.SetReadingPeer(null);state.Save();}};
         Deactivated+=(_,_)=>pigeon.SetReadingPeer(null);
         Activated+=(_,_)=>RefreshChat();
@@ -106,10 +108,18 @@ internal sealed partial class MacWindow : Window
     }
     private void UpdateBadges()
     {
-        var count=pigeon.UnreadCounts().Values.Sum();var content=new Grid();content.Children.Add(T("飞鸽传书",12));
-        if(count>0)content.Children.Add(new Border{Background=new SolidColorBrush(Color.Parse("#e84d60")),CornerRadius=new CornerRadius(9),Padding=new Thickness(4,0),HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Top,Margin=new Thickness(0,-10,-8,0),Child=new TextBlock{Text=PigeonUnread.Label(count),Foreground=Brushes.White,FontSize=11}});
-        navigation["飞鸽传书"].Content=content;Avalonia.Automation.AutomationProperties.SetName(navigation["飞鸽传书"],count>0?$"飞鸽传书，{count} 条未读消息":"飞鸽传书");
+        var count=pigeon.UnreadCounts().Values.Sum();SetNavigationBadge(count);
         if(section=="飞鸽传书"&&IsVisible)RefreshChat();
+    }
+    private void SetNavigationBadge(int count)
+    {
+        var content=new Grid{RowDefinitions=new RowDefinitions("Auto,Auto")};content.Children.Add(T("飞鸽传书",12));
+        if(count>0)
+        {
+            var badge=new Border{Background=new SolidColorBrush(Color.Parse("#e84d60")),CornerRadius=new CornerRadius(9),Padding=new Thickness(5,1),MinHeight=18,MinWidth=20,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0,3,0,0),Child=new TextBlock{Text=PigeonUnread.Label(count),Foreground=Brushes.White,FontSize=11,HorizontalAlignment=HorizontalAlignment.Center}};
+            Grid.SetRow(badge,1);content.Children.Add(badge);
+        }
+        navigation["飞鸽传书"].Content=content;Avalonia.Automation.AutomationProperties.SetName(navigation["飞鸽传书"],count>0?$"飞鸽传书，{count} 条未读消息":"飞鸽传书");
     }
     private void Apps()
     {
@@ -142,12 +152,12 @@ internal sealed partial class MacWindow : Window
         gridViewport.Content=tiles;
         var layout=new DockPanel{Background=Brushes.Transparent};var top=Stack(header,query,new ScrollViewer{Content=searchBar,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto},T("最近打开 · 右键锁定",12),new ScrollViewer{Content=recentBar,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto},tags);DockPanel.SetDock(top,Dock.Top);layout.Children.Add(top);
         backGroup=B("‹ 返回应用页",()=>{folder=null;RenderTiles();});backGroup.IsVisible=folder.HasValue;
-        var footer=Stack(backGroup,T("双指下滚下一页，上滚上一页 · 右键置顶",11),paging);DockPanel.SetDock(footer,Dock.Bottom);layout.Children.Add(footer);layout.Children.Add(gridViewport);host.Content=layout;gesture.Reset();RenderTiles();
+        var footer=Stack(backGroup,T("每页 50 个 · 上下滚动 · 左右滑动翻页",11),paging);DockPanel.SetDock(footer,Dock.Bottom);layout.Children.Add(footer);layout.Children.Add(gridViewport);host.Content=layout;gesture.Reset();RenderTiles();
     }
     private Entry[] VisibleEntries()=>MacLauncher.Ordered(state,folder.HasValue?state.Data.Entries.Where(e=>e.Group==folder):Layout.Visible(state.Data,false,query.Text??"",tag),PinScope);
     private void RenderTiles()
     {
-        if(section!="快捷应用")return;tiles.Children.Clear();
+        if(section!="快捷应用")return;tiles.Children.Clear();gridViewport.Offset=default;
         var all=VisibleEntries();
         var pages=Math.Max(1,(all.Length+pageSize-1)/pageSize);page=Math.Clamp(page,0,pages-1);pageNumber.Text=$"{page+1} / {pages}";
         if(backGroup!=null)backGroup.IsVisible=folder.HasValue;
@@ -219,6 +229,13 @@ internal sealed partial class MacWindow : Window
                 }
                 if(name=="日程管理"){Agenda(1);await Task.Delay(80);Agenda();}
                 await Task.Delay(80);
+                foreach(var count in new[]{1,99,100})
+                {
+                    SetNavigationBadge(count);await Task.Delay(30);
+                    var button=navigation["飞鸽传书"];var badge=((Grid)button.Content!).Children.OfType<Border>().Single();
+                    var position=badge.TranslatePoint(default,button)??throw new Exception("未读角标未挂载。");
+                    if(position.X<0||position.Y<0||position.X+badge.Bounds.Width>button.Bounds.Width||position.Y+badge.Bounds.Height>button.Bounds.Height)throw new Exception("未读角标超出菜单按钮。");
+                }
                 if(!string.IsNullOrEmpty(output))
                 {
                     Directory.CreateDirectory(output);using var bitmap=new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize((int)Bounds.Width,(int)Bounds.Height));bitmap.Render(this);bitmap.Save(Path.Combine(output,$"{name}-{width}.png"));

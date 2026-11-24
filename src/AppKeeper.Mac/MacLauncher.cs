@@ -43,7 +43,7 @@ internal static class MacLauncher
     internal static DragDropEffects Effect(IDataTransfer data)=>data.Contains(EntryFormat)||data.Contains(TagFormat)?DragDropEffects.Move:data.Contains(DataFormat.File)?DragDropEffects.Copy:DragDropEffects.None;
     internal static string[] Paths(IDataTransfer data)=>(data.TryGetFiles()??[]).Select(f=>f.TryGetLocalPath()).Where(p=>p!=null)
         .Select(p=>Path.TrimEndingDirectorySeparator(Path.GetFullPath(p!))).Distinct(StringComparer.Ordinal).ToArray();
-    internal static int Capacity(double width,double height)=>Math.Clamp((int)(width/121),1,12)*Math.Clamp((int)(height/112),1,7);
+    internal const int PageSize=50;
 }
 
 internal sealed class MacPageGesture
@@ -55,8 +55,8 @@ internal sealed class MacPageGesture
     {
         if(now-last>250){accumulated=0;flipped=false;}
         last=now;
-        if(flipped||Math.Abs(y)<Math.Abs(x)||y==0)return 0;
-        accumulated+=y;
+        if(flipped||Math.Abs(x)<=Math.Abs(y)||x==0)return 0;
+        accumulated+=x;
         if(Math.Abs(accumulated)<1)return 0;
         flipped=true;return accumulated<0?1:-1;
     }
