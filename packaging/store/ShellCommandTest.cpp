@@ -36,10 +36,29 @@ static int confirm(const wchar_t* tag)
     }
     return 24;
 }
+static int legacy(int count,wchar_t** paths)
+{
+    std::vector<PCIDLIST_ABSOLUTE> ids;
+    for(int i=0;i<count;++i){PIDLIST_ABSOLUTE item=nullptr;if(FAILED(SHParseDisplayName(paths[i],nullptr,&item,0,nullptr)))return 30;ids.push_back(item);}
+    ComPtr<IShellFolder> desktop;ComPtr<IContextMenu> menu;SHGetDesktopFolder(&desktop);
+    auto hr=desktop->GetUIObjectOf(nullptr,(UINT)ids.size(),ids.data(),IID_IContextMenu,nullptr,(void**)menu.GetAddressOf());
+    for(auto id:ids)CoTaskMemFree((void*)id);if(FAILED(hr))return 31;
+    auto popup=CreatePopupMenu();hr=menu->QueryContextMenu(popup,0,1,0x7fff,CMF_NORMAL);if(FAILED(hr))return 32;
+    UINT command=0;
+    for(int i=0;i<GetMenuItemCount(popup);++i)
+    {
+        wchar_t label[256];GetMenuStringW(popup,i,label,256,MF_BYPOSITION);
+        if(std::wstring(label)==L"添加到 EasyAppKeeper"){command=GetMenuItemID(popup,i);break;}
+    }
+    if(!command){DestroyMenu(popup);return 33;}
+    CMINVOKECOMMANDINFO invoke={sizeof(invoke)};invoke.lpVerb=MAKEINTRESOURCEA(command-1);invoke.nShow=SW_SHOWNORMAL;
+    hr=menu->InvokeCommand(&invoke);DestroyMenu(popup);return SUCCEEDED(hr)?0:34;
+}
 int wmain(int argc,wchar_t** argv)
 {
     if(argc<3)return 2;CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     if(std::wstring(argv[2])==L"--confirm")return confirm(argc>3?argv[3]:L"");
+    if(std::wstring(argv[2])==L"--legacy")return legacy(argc-3,argv+3);
     auto library=LoadLibraryW(argv[1]);if(!library)return 3;
     auto get=reinterpret_cast<HRESULT(__stdcall*)(REFCLSID,REFIID,void**)>(GetProcAddress(library,"DllGetClassObject"));
     ComPtr<IClassFactory> factory;ComPtr<IExplorerCommand> command;

@@ -46,6 +46,11 @@ jobs:
           name: AppKeeper-win-x64
           path: artifacts/win-x64/AppKeeper.exe
           if-no-files-found: error
+      - name: Verify actual Explorer context menu batch delivery
+        shell: pwsh
+        run: |
+          ./packaging/store/Build-ShellCommand.ps1 -OutputDirectory artifacts/native-test
+          ./packaging/store/Test-PortableShell.ps1 -Executable artifacts/win-x64/AppKeeper.exe -NativeTest artifacts/native-test/ShellCommandTest.exe
 
   store:
     name: Build EasyAppKeeper MSIX
