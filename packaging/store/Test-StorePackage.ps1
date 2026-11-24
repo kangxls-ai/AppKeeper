@@ -75,8 +75,47 @@ public static class StoreActivation
     }
     Write-Output "PASS - registered $appId and activated it with writable LocalState"
     Get-Content -LiteralPath (Join-Path $localState 'package-self-test.txt') -Encoding utf8
+    $dataRoot = Join-Path $localState 'Data'
+    New-Item -ItemType Directory -Force $dataRoot | Out-Null
+    $library = Join-Path $dataRoot 'AppKeeper.data.json'
+    '{"StartWithWindows":false,"Entries":[],"Tags":[]}' | Set-Content -LiteralPath $library -Encoding utf8
+    $nativeTest=Join-Path (Split-Path -Parent $Package) 'native/ShellCommandTest.exe'
+    $dll=Join-Path $installed.InstallLocation 'EasyAppKeeper.Shell.dll'
+    & $nativeTest $dll --metadata
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged native context menu metadata failed.' }
+    $sampleFolder=(New-Item -ItemType Directory (Join-Path $root "中文 ' & 文件夹")).FullName
+    $sampleFile=Join-Path $root "中文 ' & 文件.txt"
+    Set-Content -LiteralPath $sampleFile -Value 'source stays unchanged' -Encoding utf8
+    foreach ($round in 1,2) {
+        & $nativeTest $dll --invoke $sampleFile $sampleFolder
+        if ($LASTEXITCODE -ne 0) { throw "Native multi-selection activation failed ($round)." }
+        $arguments=@($dll,'--confirm')
+        if ($round -eq 2) { $arguments+='右键验收' }
+        & $nativeTest @arguments
+        if ($LASTEXITCODE -ne 0) { throw "Add dialog confirmation failed ($round): $LASTEXITCODE" }
+        $deadline=(Get-Date).AddSeconds(30)
+        do {
+            Start-Sleep -Milliseconds 200
+            $saved=Get-Content -LiteralPath $library -Raw -Encoding utf8 | ConvertFrom-Json
+            $entries=@($saved.Entries | Where-Object { $_.Target -in @($sampleFile,$sampleFolder) })
+            $complete=($entries.Count -eq 2)
+            if ($round -eq 2) { $complete=$complete -and @($entries | Where-Object { $_.Tags -contains '右键验收' }).Count -eq 2 }
+        } until ($complete -or (Get-Date) -gt $deadline)
+        if (!$complete) { throw "External entries were not persisted ($round)." }
+    }
+    if ((Get-Content -LiteralPath $sampleFile -Raw).Trim() -ne 'source stays unchanged') { throw 'Original source file changed.' }
+    $marker=Join-Path $dataRoot 'shell-disabled'
+    Set-Content -LiteralPath $marker -Value ''
+    & $nativeTest $dll --hidden
+    if ($LASTEXITCODE -ne 0) { throw 'Context-menu disable switch failed.' }
+    Remove-Item -LiteralPath $marker
+    Write-Output 'PASS - native Store context menu cold start, warm batch delivery, duplicate reuse, new tag selection, source preservation and disable switch'
 }
 finally {
+    if ($installed) {
+        $executable=Join-Path $installed.InstallLocation 'AppKeeper.exe'
+        Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $executable } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    }
     if ($installed) { Remove-AppxPackage -Package $installed.PackageFullName }
     if ($cert) {
         Remove-Item -LiteralPath "Cert:\LocalMachine\TrustedPeople\$($cert.Thumbprint)" -ErrorAction SilentlyContinue

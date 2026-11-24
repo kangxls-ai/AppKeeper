@@ -123,6 +123,10 @@ public partial class MainWindow : Window
         Root.BeginAnimation(OpacityProperty, new DoubleAnimation(.8, 1, TimeSpan.FromMilliseconds(135)));
     }
 
+    internal void ShowExternalEntries(string? tag)
+    {
+        RevealHome();selectedTag=tag;SearchBox.Clear();page=0;RefreshData();
+    }
     internal void RevealHome()
     {
         ShowModule(null, AppsTab);

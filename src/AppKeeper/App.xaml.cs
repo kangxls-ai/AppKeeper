@@ -78,11 +78,13 @@ public partial class App : Application
             return;
         }
 
+        try { var paths=EntryInbox.Arguments(e.Args);if(paths.Length>0)Inbox.Enqueue(paths); }
+        catch(Exception error) when(error is IOException or UnauthorizedAccessException or ArgumentException){Error(error.Message);Shutdown(1);return;}
         var background = e.Args.Contains("--background") || (profile.IsStore &&
             string.Equals(Path.GetFileName(Environment.ProcessPath), "EasyAppKeeper.Startup.exe", StringComparison.OrdinalIgnoreCase));
         const string instanceName = @"Local\AppKeeper.V1";
         using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
-        var name = instanceName + "." + identity.User?.Value;
+        var name = instanceName + "." + identity.User?.Value + "." + EntryInbox.Scope(profile.DataDirectory);
         showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, name + ".Show");
         instance = new Mutex(false, name, out var first);
         if (!first)
@@ -143,7 +145,10 @@ public partial class App : Application
         ball.Present(data.Ball);
         SystemEvents.DisplaySettingsChanged += DisplaySettingsChanged;
         if (writable)
+        {
             ApplyAutostart();
+            ApplyShellMenu();StartEntryInbox();
+        }
 
         showWait = ThreadPool.RegisterWaitForSingleObject(showEvent, (_, _) =>
         {
@@ -364,7 +369,7 @@ public partial class App : Application
         }
     }
 
-    internal bool SaveSettings(uint modifiers, int key, bool startup)
+    internal bool SaveSettings(uint modifiers, int key, bool startup, bool shellIntegration)
     {
         var previous = data;
         if ((modifiers != previous.Modifiers || key != previous.Key || !hotkeyRegistered) &&
@@ -379,6 +384,7 @@ public partial class App : Application
             library.Modifiers = modifiers;
             library.Key = key;
             library.StartWithWindows = startup;
+            library.ShellIntegration = shellIntegration;
         }))
         {
             RegisterShortcut();
@@ -386,6 +392,7 @@ public partial class App : Application
         }
         hotkeyNotice = "";
         ApplyAutostart();
+        ApplyShellMenu();entryTimer?.Start();
         launcher?.RefreshStatus();
         return true;
     }
@@ -455,6 +462,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        entryTimer?.Stop();
         reminderTimer?.Stop();
         agendaSync?.Dispose();
         recentUsage?.Dispose();

@@ -1,0 +1,4 @@
+LIBRARY EasyAppKeeper.Shell
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

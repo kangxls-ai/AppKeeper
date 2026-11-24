@@ -10,6 +10,19 @@ func fail(_ text: String) -> Never {
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else { fail("缺少系统操作。") }
 switch arguments[1] {
+case "--services-update":
+    NSUpdateDynamicServices()
+case "--icons":
+    struct FileIcon: Codable { let Name: String; let Path: String; let Icon: String }
+    var result: [FileIcon] = []
+    for path in arguments.dropFirst(2) where FileManager.default.fileExists(atPath: path) {
+        let icon = NSWorkspace.shared.icon(forFile: path)
+        icon.size = NSSize(width: 64, height: 64)
+        guard let tiff = icon.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else { continue }
+        result.append(FileIcon(Name: FileManager.default.displayName(atPath: path), Path: path, Icon: png.base64EncodedString()))
+    }
+    let data = try JSONEncoder().encode(result)
+    print(String(data: data, encoding: .utf8)!)
 case "--hotkey":
     let application = NSApplication.shared
     application.setActivationPolicy(.prohibited)

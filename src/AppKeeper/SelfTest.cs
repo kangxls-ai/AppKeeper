@@ -14,6 +14,7 @@ internal static class SelfTest
         Directory.CreateDirectory(directory);
         try
         {
+            EntryInboxSelfTest.Run(directory);
             Check(Pinyin.Matches("微软计算器", "jisuan") && Pinyin.Matches("微软计算器", "wrjsq") &&
                 Pinyin.Matches("重庆银行", "chongqingyinhang") && Pinyin.Matches("终端 Terminal", "zdT") &&
                 Pinyin.Matches("画图", "画") && !Pinyin.Matches("画图", "calc"), "Chinese search");

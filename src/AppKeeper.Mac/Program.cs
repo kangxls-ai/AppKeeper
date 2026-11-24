@@ -20,6 +20,17 @@ internal static class Program
         if (args.Contains("--self-test")) return MacSelfTest.Run().GetAwaiter().GetResult();
         if (args.Contains("--ui-smoke")) MacPlatform.TestRoot=Path.Combine(Path.GetTempPath(),"EasyAppKeeper-ui-"+Guid.NewGuid().ToString("N"));
         if (!OperatingSystem.IsMacOS()) { Console.Error.WriteLine("EasyAppKeeper Mac 需要 macOS；可使用 --self-test 运行共享逻辑检查。"); return 1; }
+        try
+        {
+            var paths=EntryInbox.Arguments(args);
+            if(paths.Length>0)
+            {
+                new EntryInbox(MacPlatform.Root).Enqueue(paths);
+                try{using var probe=new FileStream(Path.Combine(MacPlatform.Root,"instance.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
+                catch(IOException){return 0;}
+            }
+        }
+        catch(Exception error) when(error is IOException or UnauthorizedAccessException or ArgumentException){Console.Error.WriteLine(error.Message);return 1;}
         var software=args.Contains("--software-rendering")||args.Contains("--ui-smoke");
         return AppBuilder.Configure<MacApp>().UsePlatformDetect()
             .With(new AvaloniaNativePlatformOptions{AppSandboxEnabled=false,RenderingMode=software?[AvaloniaNativeRenderingMode.Software]:[AvaloniaNativeRenderingMode.Metal,AvaloniaNativeRenderingMode.OpenGl,AvaloniaNativeRenderingMode.Software]})
@@ -56,11 +67,12 @@ public sealed class MacApp : Application
                 ModuleFiles.Write(Path.Combine(state.Root,"AppKeeper.pigeon.json"),new PigeonData{Peers=[new("ui-peer","示例 Windows 电脑","127.0.0.2",1,"paired",false)],Items=[new(Guid.NewGuid(),"ui-peer",false,"text","中文消息与部分选择复制\n第二行",DateTimeOffset.Now,"saved",Unread:true),new(Guid.NewGuid(),"ui-peer",false,"file","示例资料.txt",DateTimeOffset.Now,"saved",Path:sample)]});
             }
             try { instance = new FileStream(Path.Combine(state.Root,"instance.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None); }
-            catch(IOException) { MacPlatform.Open(Path.Combine(AppContext.BaseDirectory,"..","..")); desktop.Shutdown(); return; }
+            catch(IOException) { desktop.Shutdown(); return; }
             pigeon = new PigeonService(state.Root);
             var agenda = new AgendaStore(state.Root); sync = new AgendaLanSync(agenda,state.Root);
             if(MacPlatform.TestRoot!=null)agenda.Append("create","ui-task",new{title="检查 Mac 界面与快捷键",category="验收",deadline=AgendaStore.Iso(DateTimeOffset.Now.AddHours(2)),deadlineHasTime=true});
             window = new MacWindow(state,pigeon,agenda,sync); desktop.MainWindow = window;
+            if(MacPlatform.TestRoot==null)_=ConfigureFinder();
             ball = new FloatingWindow(state,()=>window.Reveal(true));
             window.PreferencesSaved += () => { UpdateHotkey(state); if(state.Settings.Ball)ball.Show();else ball.Hide(); };
             var menu = new NativeMenu();
@@ -86,6 +98,7 @@ public sealed class MacApp : Application
         base.OnFrameworkInitializationCompleted();
     }
     private async Task StartSync() { try { await sync!.StartAsync(); } catch(Exception e) { Dispatcher.UIThread.Post(()=>window!.Status(e.Message)); } }
+    private async Task ConfigureFinder(){try{await window!.ApplyFinderIntegration();}catch(Exception e){window!.Status("访达右键设置失败："+e.Message);}}
     private void UpdateHotkey(MacState state)
     {
         if(hotkey is { HasExited:false }) hotkey.Kill(); hotkey?.Dispose();
@@ -112,6 +125,8 @@ internal static class MacSelfTest
             state.Visit(state.Data.Entries[0]);state.Settings.RecordVisits=false;state.Visit(state.Data.Entries[0]);
             if(new MacState(state.Root).Settings.Visits.Count!=1 || !Pinyin.Matches("计算器","jisuanqi"))throw new Exception("Mac visits or pinyin failed");
             MacLauncherSelfTest.Run(root);
+            EntryInboxSelfTest.Run(root);
+            await MacFinderSelfTest.Run(root);
             await ModuleSelfTest.Run(root);
             Console.WriteLine("PASS: launcher pins, drop path normalization, gesture debounce, scoped recent history, pinyin, Pigeon pairing/offline text/ZIP/resume/unread, SQLite, MarkDo encrypted phone sync");return 0;
         }

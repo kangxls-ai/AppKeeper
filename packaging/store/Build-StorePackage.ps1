@@ -2,6 +2,7 @@
 param(
     [string]$OutputDirectory = (Join-Path $PSScriptRoot '../../artifacts/store'),
     [string]$DotNet = 'dotnet',
+    [string]$ShellCommand,
     [string]$MakeAppx
 )
 $ErrorActionPreference = 'Stop'
@@ -38,6 +39,11 @@ try {
 
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'AppxManifest.xml') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Assets') -Destination $stage -Recurse
+    if (!$ShellCommand) {
+        $native = Join-Path $output 'native'
+        $ShellCommand = (& (Join-Path $PSScriptRoot 'Build-ShellCommand.ps1') -OutputDirectory $native).FullName
+    }
+    Copy-Item -LiteralPath $ShellCommand -Destination (Join-Path $stage 'EasyAppKeeper.Shell.dll')
     # Both app hosts load the same local AppKeeper.dll. The startup host opens it in tray mode.
     Copy-Item -LiteralPath (Join-Path $stage 'AppKeeper.exe') -Destination (Join-Path $stage 'EasyAppKeeper.Startup.exe')
     [xml]$manifest = Get-Content -LiteralPath (Join-Path $stage 'AppxManifest.xml') -Raw -Encoding utf8

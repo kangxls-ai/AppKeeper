@@ -191,14 +191,15 @@ internal sealed partial class MacWindow
     {
         var ball=new CheckBox{Content="显示贴边桌面浮球",IsChecked=state.Settings.Ball};var record=new CheckBox{Content="记录通过本应用打开的入口",IsChecked=state.Settings.RecordVisits};
         var login=new CheckBox{Content="登录时启动",IsChecked=await MacPlatform.Native("--login","status")=="true"};
+        var finder=new CheckBox{Content="启用访达右键“添加到 EasyAppKeeper”",IsChecked=state.Settings.FinderIntegration};
         uint code=state.Settings.HotkeyCode,modifiers=state.Settings.HotkeyModifiers;var hotkey=new TextBox{IsReadOnly=true,Watermark="点此按下快捷键",Text=$"当前快捷键：{HotkeyName(code,modifiers)}"};
         hotkey.KeyDown+=(_,e)=>{if(TryHotkey(e.Key,e.KeyModifiers,out var c,out var m)){code=c;modifiers=m;hotkey.Text=HotkeyName(c,m);e.Handled=true;}};
         var export=B("导出布局",()=>_=Safe(async()=>{var f=await StorageProvider.SaveFilePickerAsync(new(){SuggestedFileName="EasyAppKeeper布局.json"});if(f?.TryGetLocalPath() is {} p)state.Store.Export(p,state.Data);}));
         var import=B("导入布局",()=>_=Safe(async()=>{var files=await StorageProvider.OpenFilePickerAsync(new());if(files.FirstOrDefault()?.TryGetLocalPath() is {} p){state.Import(p);if(section=="快捷应用")Apps();}}));
         var license=B("第三方许可",()=>_=Safe(async()=>{using var stream=typeof(MacWindow).Assembly.GetManifestResourceStream("AppKeeper.THIRD-PARTY-NOTICES.txt");if(stream!=null)await Alert(await new StreamReader(stream).ReadToEndAsync());}));
-        if(await Dialog("偏好设置",[T("全局快捷键（Option / Command / Control 加字母或空格）",12),hotkey,ball,record,login,export,import,B("打开数据目录",()=>MacPlatform.Open(state.Root)),license]))
+        if(await Dialog("偏好设置",[T("全局快捷键（Option / Command / Control 加字母或空格）",12),hotkey,ball,record,login,finder,T("访达 → 快速操作 → 添加到 EasyAppKeeper；也可能显示在“服务”菜单。",12),export,import,B("打开数据目录",()=>MacPlatform.Open(state.Root)),license]))
         {
-            await MacPlatform.Native("--login",login.IsChecked==true?"enable":"disable");state.Settings.Ball=ball.IsChecked==true;state.Settings.RecordVisits=record.IsChecked==true;state.Settings.HotkeyCode=code;state.Settings.HotkeyModifiers=modifiers;state.Save();PreferencesSaved?.Invoke();
+            await MacPlatform.Native("--login",login.IsChecked==true?"enable":"disable");state.Settings.FinderIntegration=finder.IsChecked==true;state.Settings.Ball=ball.IsChecked==true;state.Settings.RecordVisits=record.IsChecked==true;state.Settings.HotkeyCode=code;state.Settings.HotkeyModifiers=modifiers;state.Save();await ApplyFinderIntegration();entryTimer.Start();PreferencesSaved?.Invoke();
         }
     });
     private static readonly Dictionary<Avalonia.Input.Key,uint> MacKeys=new(){[Avalonia.Input.Key.Space]=49,[Avalonia.Input.Key.A]=0,[Avalonia.Input.Key.B]=11,[Avalonia.Input.Key.C]=8,[Avalonia.Input.Key.D]=2,[Avalonia.Input.Key.E]=14,[Avalonia.Input.Key.F]=3,[Avalonia.Input.Key.G]=5,[Avalonia.Input.Key.H]=4,[Avalonia.Input.Key.I]=34,[Avalonia.Input.Key.J]=38,[Avalonia.Input.Key.K]=40,[Avalonia.Input.Key.L]=37,[Avalonia.Input.Key.M]=46,[Avalonia.Input.Key.N]=45,[Avalonia.Input.Key.O]=31,[Avalonia.Input.Key.P]=35,[Avalonia.Input.Key.Q]=12,[Avalonia.Input.Key.R]=15,[Avalonia.Input.Key.S]=1,[Avalonia.Input.Key.T]=17,[Avalonia.Input.Key.U]=32,[Avalonia.Input.Key.V]=9,[Avalonia.Input.Key.W]=13,[Avalonia.Input.Key.X]=7,[Avalonia.Input.Key.Y]=16,[Avalonia.Input.Key.Z]=6};

@@ -75,6 +75,7 @@ internal sealed partial class MacWindow : Window
         pigeon.UnreadChanged+=()=>Dispatcher.UIThread.Post(UpdateBadges);
         poll.Tick+=(_,_)=>{if(IsVisible && section=="飞鸽传书")RefreshChat();};poll.Start();
         Navigate("快捷应用");
+        if(MacPlatform.TestRoot==null)StartEntryInbox();
     }
     internal void Status(string text)=>notice.Text=text;
     private static TextBlock T(string text,double size=14)=>new(){Text=text,FontSize=size,TextWrapping=TextWrapping.Wrap};
@@ -164,7 +165,7 @@ internal sealed partial class MacWindow : Window
         foreach(var entry in all.Skip(page*pageSize).Take(pageSize))
         {
             var inner=new StackPanel{Spacing=6,HorizontalAlignment=HorizontalAlignment.Center};
-            if(icons.TryGetValue(entry.Target,out var image)){try{inner.Children.Add(new Image{Source=new Bitmap(new MemoryStream(Convert.FromBase64String(image))),Width=48,Height=48});}catch{inner.Children.Add(T("▣",32));}}
+            if((entry.Icon??icons.GetValueOrDefault(entry.Target)) is {} image){try{inner.Children.Add(new Image{Source=new Bitmap(new MemoryStream(Convert.FromBase64String(image))),Width=48,Height=48});}catch{inner.Children.Add(T("▣",32));}}
             else inner.Children.Add(new Border{Background=Soft,CornerRadius=new CornerRadius(12),Padding=new Thickness(12),Child=T(entry.Kind==EntryKind.Group?"▦":entry.Kind==EntryKind.Directory?"📁":entry.Kind==EntryKind.Web?"◎":"▣",28)});
             inner.Children.Add(new TextBlock{Text=(MacLauncher.Pins(state,PinScope).Contains(entry.Id)?"📌 ":"")+entry.Name,FontSize=12,MaxWidth=102,TextTrimming=TextTrimming.CharacterEllipsis,HorizontalAlignment=HorizontalAlignment.Center});
             var button=B("",()=>{if(entry.Kind==EntryKind.Group){folder=entry.Id;page=0;RenderTiles();}else Open(entry);});button.Content=inner;button.Width=116;button.Height=108;button.Background=Brushes.Transparent;ToolTip.SetTip(button,entry.Name+"\n"+entry.Target);button.ContextMenu=EntryMenu(entry);

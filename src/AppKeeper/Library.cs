@@ -29,6 +29,7 @@ internal sealed class Library
     public List<Entry> Entries { get; set; } = [];
     public HashSet<string> Ignored { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public bool StartWithWindows { get; set; } = true;
+    public bool ShellIntegration { get; set; } = true;
     public uint Modifiers { get; set; } = 1;
     public int Key { get; set; } = 32;
     public List<string> Tags { get; set; } = [];

@@ -69,6 +69,7 @@ internal sealed record MacVisit(string Path, string Name, EntryKind Kind, DateTi
 internal sealed class MacSettings
 {
     public bool Ball { get; set; } = true;
+    public bool FinderIntegration { get; set; } = true;
     public bool RecordVisits { get; set; } = true;
     public uint HotkeyCode { get; set; } = 49;
     public uint HotkeyModifiers { get; set; } = 2048;
@@ -137,16 +138,16 @@ internal sealed class MacState
         ModuleFiles.Write(file,Settings);
     }
     internal void Import(string path) { var next = LibraryStore.Read(path); Data = next; Save(); }
-    internal void Add(string path, string? tag, string? label = null)
+    internal void Add(string path, string? tag, string? label = null, bool save = true)
     {
         if(!WindowsCatalog.IsWeb(path))path=Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         if(!WindowsCatalog.IsWeb(path)&&!File.Exists(path)&&!Directory.Exists(path))throw new FileNotFoundException("找不到拖入的文件或文件夹。",path);
         var kind = WindowsCatalog.IsWeb(path) ? EntryKind.Web : Directory.Exists(path) && !path.EndsWith(".app",StringComparison.OrdinalIgnoreCase) ? EntryKind.Directory : EntryKind.File;
         var existing = Data.Entries.Find(e=>e.Target==path||(e.Kind is EntryKind.File or EntryKind.Directory&&Path.IsPathFullyQualified(e.Target)&&Path.TrimEndingDirectorySeparator(Path.GetFullPath(e.Target))==path));
-        if(existing!=null) { existing.Target=path;if(string.IsNullOrWhiteSpace(existing.Name))existing.Name=DefaultName(path,kind);Layout.AssignTag(Data,existing,tag); Save(); return; }
+        if(existing!=null) { existing.Target=path;if(string.IsNullOrWhiteSpace(existing.Name))existing.Name=DefaultName(path,kind);Layout.AssignTag(Data,existing,tag); if(save)Save(); return; }
         var entry = new Entry { Name=string.IsNullOrWhiteSpace(label)?DefaultName(path,kind):label.Trim(),Target=path,Kind=kind };
         if(kind==EntryKind.Web && string.IsNullOrWhiteSpace(label)) entry.Name=new Uri(path).Host;
-        Data.Entries.Add(entry); Layout.AssignTag(Data,entry,tag); Save();
+        Data.Entries.Add(entry); Layout.AssignTag(Data,entry,tag); if(save)Save();
     }
     internal void Visit(Entry entry)
     {
