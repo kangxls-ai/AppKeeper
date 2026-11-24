@@ -57,7 +57,7 @@ public:
     IFACEMETHODIMP GetToolTip(IShellItemArray*,PWSTR* value) override{return SHStrDupW(L"批量创建快捷入口，原文件保留原位",value);}
     IFACEMETHODIMP GetCanonicalName(GUID* value) override{*value=CommandId;return S_OK;}
     IFACEMETHODIMP GetState(IShellItemArray*,BOOL,EXPCMDSTATE* value) override
-    {try{*value=fs::exists(context().data/L"shell-disabled")?ECS_HIDDEN:ECS_ENABLED;return S_OK;}catch(...){*value=ECS_HIDDEN;return S_OK;}}
+    {try{*value=fs::exists(context().data/L"shell-disabled")?ECS_HIDDEN:ECS_ENABLED;return S_OK;}catch(HRESULT hr){*value=ECS_HIDDEN;return hr;}catch(...){*value=ECS_HIDDEN;return E_FAIL;}}
     IFACEMETHODIMP GetFlags(EXPCMDFLAGS* value) override{*value=ECF_DEFAULT;return S_OK;}
     IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand** value) override{*value=nullptr;return E_NOTIMPL;}
     IFACEMETHODIMP Invoke(IShellItemArray* items,IBindCtx*) override

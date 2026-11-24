@@ -82,7 +82,7 @@ public static class StoreActivation
     $nativeTest=Join-Path (Split-Path -Parent $Package) 'native/ShellCommandTest.exe'
     $dll=Join-Path $installed.InstallLocation 'EasyAppKeeper.Shell.dll'
     & $nativeTest $dll --metadata
-    if ($LASTEXITCODE -ne 0) { throw 'Packaged native context menu metadata failed.' }
+    if ($LASTEXITCODE -ne 0) { throw "Packaged native context menu metadata failed: $LASTEXITCODE" }
     $sampleFolder=(New-Item -ItemType Directory (Join-Path $root "中文 ' & 文件夹")).FullName
     $sampleFile=Join-Path $root "中文 ' & 文件.txt"
     Set-Content -LiteralPath $sampleFile -Value 'source stays unchanged' -Encoding utf8

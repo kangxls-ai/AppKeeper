@@ -59,14 +59,16 @@ int wmain(int argc,wchar_t** argv)
     if(argc<3)return 2;CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     if(std::wstring(argv[2])==L"--confirm")return confirm(argc>3?argv[3]:L"");
     if(std::wstring(argv[2])==L"--legacy")return legacy(argc-3,argv+3);
-    auto library=LoadLibraryW(argv[1]);if(!library)return 3;
+    auto library=LoadLibraryW(argv[1]);if(!library){std::cerr<<"LoadLibrary failed: "<<GetLastError()<<std::endl;return 3;}
     auto get=reinterpret_cast<HRESULT(__stdcall*)(REFCLSID,REFIID,void**)>(GetProcAddress(library,"DllGetClassObject"));
     ComPtr<IClassFactory> factory;ComPtr<IExplorerCommand> command;
-    if(!get||FAILED(get(CommandId,IID_PPV_ARGS(&factory)))||FAILED(factory->CreateInstance(nullptr,IID_PPV_ARGS(&command))))return 4;
+    if(!get){std::cerr<<"Factory export missing"<<std::endl;return 4;}
+    auto factoryHr=get(CommandId,IID_PPV_ARGS(&factory));if(FAILED(factoryHr)){std::cerr<<"GetClassObject: "<<std::hex<<factoryHr<<std::endl;return 4;}
+    auto createHr=factory->CreateInstance(nullptr,IID_PPV_ARGS(&command));if(FAILED(createHr)){std::cerr<<"CreateInstance: "<<std::hex<<createHr<<std::endl;return 4;}
     PWSTR title=nullptr;if(FAILED(command->GetTitle(nullptr,&title))||std::wstring(title)!=L"添加到 EasyAppKeeper")return 5;CoTaskMemFree(title);
-    EXPCMDSTATE state;if(FAILED(command->GetState(nullptr,TRUE,&state)))return 6;
+    EXPCMDSTATE state;auto stateHr=command->GetState(nullptr,TRUE,&state);if(FAILED(stateHr)){std::cerr<<"GetState: "<<std::hex<<stateHr<<std::endl;return 6;}
     if(std::wstring(argv[2])==L"--hidden")return state==ECS_HIDDEN?0:7;
-    if(state!=ECS_ENABLED)return 8;
+    if(state!=ECS_ENABLED){std::cerr<<"Unexpected command state: "<<state<<std::endl;return 8;}
     PWSTR icon=nullptr;if(FAILED(command->GetIcon(nullptr,&icon)))return 9;CoTaskMemFree(icon);
     if(std::wstring(argv[2])==L"--invoke")
     {
