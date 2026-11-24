@@ -10,7 +10,7 @@ $library=Join-Path $directory 'AppKeeper.data.json'
 try {
     $process=Start-Process -FilePath $executable -ArgumentList '--background' -WindowStyle Hidden -PassThru
     $deadline=(Get-Date).AddSeconds(30)
-    do { Start-Sleep -Milliseconds 250; $registered=Test-Path 'HKCU:\Software\Classes\*\shell\EasyAppKeeper.Add' } until ($registered -or (Get-Date) -gt $deadline)
+    do { Start-Sleep -Milliseconds 250; $registered=Test-Path -LiteralPath 'HKCU:\Software\Classes\*\shell\EasyAppKeeper.Add' } until ($registered -or (Get-Date) -gt $deadline)
     if (!$registered) { throw 'Portable shell command was not registered.' }
     $folder=(New-Item -ItemType Directory (Join-Path $root "中文 ' & 文件夹")).FullName
     $file=Join-Path $root "中文 ' & 文件.txt";Set-Content -LiteralPath $file -Value 'unchanged' -Encoding utf8

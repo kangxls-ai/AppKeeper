@@ -344,6 +344,7 @@ public partial class App : Application
             notice = "已导入备份。";
             RegisterShortcut();
             ApplyAutostart();
+            ApplyShellMenu();
             launcher?.RefreshData();
             _ = Refresh();
         }

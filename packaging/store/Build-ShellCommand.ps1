@@ -21,7 +21,7 @@ call "$dev" -arch=x64 -host_arch=x64
 if errorlevel 1 exit /b %errorlevel%
 cl /nologo /std:c++17 /utf-8 /EHsc /MT /O2 /LD "$source" /Fo"$object" /link /DEF:"$definition" /OUT:"$dll" ole32.lib shell32.lib shlwapi.lib uuid.lib
 if errorlevel 1 exit /b %errorlevel%
-cl /nologo /std:c++17 /utf-8 /EHsc /MT /O2 "$test" /Fo"$testObject" /Fe"$testExe" /link ole32.lib oleaut32.lib shell32.lib shlwapi.lib uiautomationcore.lib uuid.lib
+cl /nologo /std:c++17 /utf-8 /EHsc /MT /O2 "$test" /Fo"$testObject" /Fe"$testExe" /link ole32.lib oleaut32.lib shell32.lib shlwapi.lib uiautomationcore.lib uuid.lib user32.lib
 exit /b %errorlevel%
 "@ | Set-Content -LiteralPath $batch -Encoding utf8
 & cmd.exe /d /c $batch | Out-Host
