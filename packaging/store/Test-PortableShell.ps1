@@ -27,6 +27,11 @@ try {
     if ($entries.Count -ne 2) { throw 'Portable Explorer selection did not deliver both the file and folder.' }
     Write-Output 'PASS - actual Explorer legacy context menu selection, multi-process batch delivery, tag dialog and portable persistence'
 }
+catch {
+    Get-ChildItem (Join-Path $directory 'entry-inbox/*.json') -ErrorAction SilentlyContinue | ForEach-Object { Get-Content -LiteralPath $_.FullName | Out-Host }
+    Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $executable } | Select-Object ProcessId,ExecutablePath,CommandLine | Format-List | Out-Host
+    throw
+}
 finally {
     Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $executable } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     foreach($kind in @('AllFilesystemObjects','*','Directory')) {

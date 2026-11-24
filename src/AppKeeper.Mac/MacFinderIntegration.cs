@@ -43,7 +43,7 @@ internal static class MacFinderIntegration
         };
         var document=new Dictionary<string,object>{["AMApplicationBuild"]="523",["AMApplicationVersion"]="2.10",["AMDocumentVersion"]="2",["actions"]=new object[]{new Dictionary<string,object>{["action"]=action}},["connectors"]=Array.Empty<object>(),["workflowMetaData"]=metadata};
         var service=new Dictionary<string,object>{["NSMenuItem"]=new Dictionary<string,object>{["default"]=Title},["NSMessage"]="runWorkflowAsService",["NSSendFileTypes"]=new object[]{"public.item"}};
-        var info=new Dictionary<string,object>{["CFBundleIdentifier"]="io.kangxls.EasyAppKeeper.add-service",["NSServices"]=new object[]{service}};
+        var info=new Dictionary<string,object>{["CFBundleName"]=Title,["CFBundleIdentifier"]="io.kangxls.EasyAppKeeper.add-service",["NSServices"]=new object[]{service}};
         Directory.CreateDirectory(contents);
         Write(Path.Combine(contents,"document.wflow"),document);Write(Path.Combine(contents,"Info.plist"),info);
     }

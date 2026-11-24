@@ -111,6 +111,14 @@ public static class StoreActivation
     Remove-Item -LiteralPath $marker
     Write-Output 'PASS - native Store context menu cold start, warm batch delivery, duplicate reuse, new tag selection, source preservation and disable switch'
 }
+catch {
+    if ($dataRoot) {
+        Get-ChildItem -LiteralPath $dataRoot -Force | Select-Object Name,Length | Format-Table | Out-Host
+        Get-ChildItem (Join-Path $dataRoot 'entry-inbox/*.json') -ErrorAction SilentlyContinue | ForEach-Object { Get-Content -LiteralPath $_.FullName | Out-Host }
+    }
+    if ($installed) { Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq (Join-Path $installed.InstallLocation 'AppKeeper.exe') } | Select-Object ProcessId,ExecutablePath,CommandLine | Format-List | Out-Host }
+    throw
+}
 finally {
     if ($installed) {
         $executable=Join-Path $installed.InstallLocation 'AppKeeper.exe'

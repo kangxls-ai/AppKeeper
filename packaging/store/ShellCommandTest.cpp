@@ -19,7 +19,9 @@ static int confirm(const wchar_t* tag)
     ComPtr<IUIAutomationElement> root;ui->GetRootElement(&root);auto title=condition(ui.Get(),UIA_NamePropertyId,L"添加到 EasyAppKeeper");
     for(int n=0;n<100;++n)
     {
-        ComPtr<IUIAutomationElement> dialog;root->FindFirst(TreeScope_Children,title.Get(),&dialog);
+        ComPtr<IUIAutomationElement> dialog;
+        if(auto window=FindWindowW(nullptr,L"添加到 EasyAppKeeper"))ui->ElementFromHandle(window,&dialog);
+        if(!dialog)root->FindFirst(TreeScope_Children,title.Get(),&dialog);
         if(dialog)
         {
             if(tag&&*tag)
@@ -34,6 +36,13 @@ static int confirm(const wchar_t* tag)
         }
         Sleep(300);
     }
+    EnumWindows([](HWND window,LPARAM)->BOOL
+    {
+        wchar_t title[512];GetWindowTextW(window,title,512);
+        if(std::wstring(title).find(L"AppKeeper")!=std::wstring::npos)
+        {DWORD pid;GetWindowThreadProcessId(window,&pid);char text[2048];WideCharToMultiByte(CP_UTF8,0,title,-1,text,2048,nullptr,nullptr);std::cerr<<"Observed window: "<<text<<" pid "<<pid<<std::endl;}
+        return TRUE;
+    },0);
     return 24;
 }
 static int legacy(int count,wchar_t** paths)

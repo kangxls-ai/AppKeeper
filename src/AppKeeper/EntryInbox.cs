@@ -28,7 +28,12 @@ internal sealed class EntryInbox(string root)
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(DirectoryPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         var file = Path.Combine(DirectoryPath, Guid.NewGuid().ToString("N") + ".json");
         var temp = file + ".tmp";
-        try { File.WriteAllText(temp,JsonSerializer.Serialize(new Request(values)), new UTF8Encoding(false));File.Move(temp,file); }
+        try
+        {
+            var bytes=JsonSerializer.SerializeToUtf8Bytes(new Request(values));
+            if(bytes.Length>1024*1024)throw new ArgumentException("所选路径过多或过长，请分批添加。");
+            File.WriteAllBytes(temp,bytes);File.Move(temp,file);
+        }
         finally { if(File.Exists(temp))File.Delete(temp); }
     }
     internal sealed record Request(string[] Paths);
