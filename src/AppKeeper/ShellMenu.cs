@@ -16,10 +16,10 @@ internal static class ShellMenu
         if(profile.IsStore)return;
         var executable=Environment.ProcessPath!;
         if(Path.GetFileName(executable).Equals("dotnet.exe",StringComparison.OrdinalIgnoreCase))return;
-        foreach(var kind in new[]{"*","Directory"})
+        foreach(var kind in new[]{"AllFilesystemObjects","*","Directory"})
         {
             var path=@"Software\Classes\"+kind+@"\shell\EasyAppKeeper.Add";
-            if(enabled)
+            if(enabled&&kind=="AllFilesystemObjects")
             {
                 using var key=Registry.CurrentUser.CreateSubKey(path);
                 key.SetValue("",Title);key.SetValue("Icon",executable+",0");key.SetValue("MultiSelectModel","Player");key.SetValue("OwnerPath",executable);

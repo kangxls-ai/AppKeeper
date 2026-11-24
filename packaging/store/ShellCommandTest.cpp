@@ -40,15 +40,18 @@ static int legacy(int count,wchar_t** paths)
 {
     std::vector<PCIDLIST_ABSOLUTE> ids;
     for(int i=0;i<count;++i){PIDLIST_ABSOLUTE item=nullptr;if(FAILED(SHParseDisplayName(paths[i],nullptr,&item,0,nullptr)))return 30;ids.push_back(item);}
-    ComPtr<IShellFolder> desktop;ComPtr<IContextMenu> menu;SHGetDesktopFolder(&desktop);
-    auto hr=desktop->GetUIObjectOf(nullptr,(UINT)ids.size(),ids.data(),IID_IContextMenu,nullptr,(void**)menu.GetAddressOf());
+    if(ids.empty())return 30;
+    ComPtr<IShellFolder> parent;ComPtr<IContextMenu> menu;auto hr=SHBindToParent(ids[0],IID_PPV_ARGS(&parent),nullptr);if(FAILED(hr))return 31;
+    std::vector<PCUITEMID_CHILD> children;for(auto id:ids)children.push_back(ILFindLastID(id));
+    hr=parent->GetUIObjectOf(nullptr,(UINT)children.size(),children.data(),IID_IContextMenu,nullptr,(void**)menu.GetAddressOf());
     for(auto id:ids)CoTaskMemFree((void*)id);if(FAILED(hr))return 31;
     auto popup=CreatePopupMenu();hr=menu->QueryContextMenu(popup,0,1,0x7fff,CMF_NORMAL);if(FAILED(hr))return 32;
     UINT command=0;
     for(int i=0;i<GetMenuItemCount(popup);++i)
     {
         wchar_t label[256];GetMenuStringW(popup,i,label,256,MF_BYPOSITION);
-        if(std::wstring(label)==L"添加到 EasyAppKeeper"){command=GetMenuItemID(popup,i);break;}
+        auto id=GetMenuItemID(popup,i);wchar_t verb[256]={};if(id&&id!=UINT_MAX)menu->GetCommandString(id-1,GCS_VERBW,nullptr,(char*)verb,256);
+        if(std::wstring(label)==L"添加到 EasyAppKeeper"||std::wstring(verb)==L"EasyAppKeeper.Add"){command=id;break;}
     }
     if(!command){DestroyMenu(popup);return 33;}
     CMINVOKECOMMANDINFO invoke={sizeof(invoke)};invoke.lpVerb=MAKEINTRESOURCEA(command-1);invoke.nShow=SW_SHOWNORMAL;
@@ -59,12 +62,19 @@ int wmain(int argc,wchar_t** argv)
     if(argc<3)return 2;CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     if(std::wstring(argv[2])==L"--confirm")return confirm(argc>3?argv[3]:L"");
     if(std::wstring(argv[2])==L"--legacy")return legacy(argc-3,argv+3);
-    auto library=LoadLibraryW(argv[1]);if(!library){std::cerr<<"LoadLibrary failed: "<<GetLastError()<<std::endl;return 3;}
-    auto get=reinterpret_cast<HRESULT(__stdcall*)(REFCLSID,REFIID,void**)>(GetProcAddress(library,"DllGetClassObject"));
     ComPtr<IClassFactory> factory;ComPtr<IExplorerCommand> command;
-    if(!get){std::cerr<<"Factory export missing"<<std::endl;return 4;}
-    auto factoryHr=get(CommandId,IID_PPV_ARGS(&factory));if(FAILED(factoryHr)){std::cerr<<"GetClassObject: "<<std::hex<<factoryHr<<std::endl;return 4;}
-    auto createHr=factory->CreateInstance(nullptr,IID_PPV_ARGS(&command));if(FAILED(createHr)){std::cerr<<"CreateInstance: "<<std::hex<<createHr<<std::endl;return 4;}
+    if(std::wstring(argv[1])==L"--registered")
+    {
+        auto hr=CoCreateInstance(CommandId,nullptr,CLSCTX_LOCAL_SERVER,IID_PPV_ARGS(&command));if(FAILED(hr)){std::cerr<<"Registered COM activation: "<<std::hex<<hr<<std::endl;return 4;}
+    }
+    else
+    {
+        auto library=LoadLibraryW(argv[1]);if(!library){std::cerr<<"LoadLibrary failed: "<<GetLastError()<<std::endl;return 3;}
+        auto get=reinterpret_cast<HRESULT(__stdcall*)(REFCLSID,REFIID,void**)>(GetProcAddress(library,"DllGetClassObject"));
+        if(!get){std::cerr<<"Factory export missing"<<std::endl;return 4;}
+        auto factoryHr=get(CommandId,IID_PPV_ARGS(&factory));if(FAILED(factoryHr)){std::cerr<<"GetClassObject: "<<std::hex<<factoryHr<<std::endl;return 4;}
+        auto createHr=factory->CreateInstance(nullptr,IID_PPV_ARGS(&command));if(FAILED(createHr)){std::cerr<<"CreateInstance: "<<std::hex<<createHr<<std::endl;return 4;}
+    }
     PWSTR title=nullptr;if(FAILED(command->GetTitle(nullptr,&title))||std::wstring(title)!=L"添加到 EasyAppKeeper")return 5;CoTaskMemFree(title);
     EXPCMDSTATE state;auto stateHr=command->GetState(nullptr,TRUE,&state);if(FAILED(stateHr)){std::cerr<<"GetState: "<<std::hex<<stateHr<<std::endl;return 6;}
     if(std::wstring(argv[2])==L"--hidden")return state==ECS_HIDDEN?0:7;

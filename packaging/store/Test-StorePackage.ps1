@@ -81,13 +81,13 @@ public static class StoreActivation
     '{"StartWithWindows":false,"Entries":[],"Tags":[]}' | Set-Content -LiteralPath $library -Encoding utf8
     $nativeTest=Join-Path (Split-Path -Parent $Package) 'native/ShellCommandTest.exe'
     $dll=Join-Path $installed.InstallLocation 'EasyAppKeeper.Shell.dll'
-    & $nativeTest $dll --metadata
+    & $nativeTest --registered --metadata
     if ($LASTEXITCODE -ne 0) { throw "Packaged native context menu metadata failed: $LASTEXITCODE" }
     $sampleFolder=(New-Item -ItemType Directory (Join-Path $root "中文 ' & 文件夹")).FullName
     $sampleFile=Join-Path $root "中文 ' & 文件.txt"
     Set-Content -LiteralPath $sampleFile -Value 'source stays unchanged' -Encoding utf8
     foreach ($round in 1,2) {
-        & $nativeTest $dll --invoke $sampleFile $sampleFolder
+        & $nativeTest --registered --invoke $sampleFile $sampleFolder
         if ($LASTEXITCODE -ne 0) { throw "Native multi-selection activation failed ($round)." }
         $arguments=@($dll,'--confirm')
         if ($round -eq 2) { $arguments+='右键验收' }
@@ -106,7 +106,7 @@ public static class StoreActivation
     if ((Get-Content -LiteralPath $sampleFile -Raw).Trim() -ne 'source stays unchanged') { throw 'Original source file changed.' }
     $marker=Join-Path $dataRoot 'shell-disabled'
     Set-Content -LiteralPath $marker -Value ''
-    & $nativeTest $dll --hidden
+    & $nativeTest --registered --hidden
     if ($LASTEXITCODE -ne 0) { throw 'Context-menu disable switch failed.' }
     Remove-Item -LiteralPath $marker
     Write-Output 'PASS - native Store context menu cold start, warm batch delivery, duplicate reuse, new tag selection, source preservation and disable switch'
