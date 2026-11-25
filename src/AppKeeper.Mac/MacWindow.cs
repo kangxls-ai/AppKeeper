@@ -71,7 +71,7 @@ internal sealed partial class MacWindow : Window
         }
         rail.Children.Add(B("偏好设置",Preferences));shell.Children.Add(rail);
         var content=new DockPanel{Margin=new Thickness(0,8,8,0)};DockPanel.SetDock(notice,Dock.Bottom);content.Children.Add(notice);content.Children.Add(host);Grid.SetColumn(content,1);shell.Children.Add(content);Content=shell;
-        var credit=new TextBlock{Text="开发者 小李鱼 · 来信建议：kangxls@gmail.com",FontSize=11,Opacity=.7,TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center,HorizontalAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(4,8,4,2)};
+        var credit=ContactFooter();
         Grid.SetRow(credit,1);Grid.SetColumnSpan(credit,2);shell.Children.Add(credit);
         Closing+=(_,e)=>
         {
@@ -227,6 +227,7 @@ internal sealed partial class MacWindow : Window
         await LauncherInputSmoke();
         await ExternalEntriesSmoke();
         await ActivationSmoke();
+        await ChatInputSmoke();
         foreach(var width in new[]{1000,360,300})
         {
             Width=width;Height=720;await Task.Delay(150);

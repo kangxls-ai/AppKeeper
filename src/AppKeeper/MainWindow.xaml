@@ -8,6 +8,11 @@
         PreviewKeyDown="HandleKey" Closing="HideOnClose" StateChanged="UpdateWindowControls"
         AllowDrop="True" PreviewDragOver="RevealHomeForDrag" DragOver="WindowDragOver" Drop="WindowDrop">
     <Window.Resources>
+        <ContextMenu x:Key="DeveloperCreditMenu" x:Shared="False">
+            <MenuItem Header="复制开发者" Click="CopyDeveloperName"/>
+            <MenuItem Header="复制邮箱" Click="CopyDeveloperEmail"/>
+            <MenuItem Header="复制全部信息" Click="CopyDeveloperCredit"/>
+        </ContextMenu>
         <Style x:Key="TileButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -156,8 +161,16 @@
             </Grid>
                 </Grid>
             </Grid>
-            <TextBlock Grid.Row="2" Text="开发者 小李鱼 · 来信建议：kangxls@gmail.com" FontSize="11"
-                       Foreground="{StaticResource Secondary}" TextWrapping="Wrap" TextAlignment="Center" Margin="5,4,5,2"/>
+            <WrapPanel Grid.Row="2" HorizontalAlignment="Center" Margin="5,4,5,2" ContextMenu="{StaticResource DeveloperCreditMenu}">
+                <TextBox Text="开发者 小李鱼 · 来信建议：" Style="{x:Null}" IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                         FontSize="11" Foreground="{StaticResource Secondary}" Background="Transparent" BorderThickness="0" Padding="0"
+                         Height="18" VerticalContentAlignment="Center" ContextMenu="{StaticResource DeveloperCreditMenu}"
+                         ToolTip="可选择文字复制，或右键复制开发者信息"/>
+                <TextBlock FontSize="11" VerticalAlignment="Center" ContextMenu="{StaticResource DeveloperCreditMenu}">
+                    <Hyperlink NavigateUri="mailto:kangxls@gmail.com" RequestNavigate="OpenDeveloperEmail" Foreground="{StaticResource Secondary}"
+                               ToolTip="点击打开默认邮件应用；右键复制邮箱">kangxls@gmail.com</Hyperlink>
+                </TextBlock>
+            </WrapPanel>
             <Thumb x:Name="ResizeThumb" Grid.Row="1" Grid.RowSpan="2" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="17" Height="17" Cursor="SizeNWSE"
                    DragDelta="ResizeWindow" DragCompleted="FinishResize" AutomationProperties.Name="调整窗口大小">
                 <Thumb.Template>

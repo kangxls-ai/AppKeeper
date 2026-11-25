@@ -65,10 +65,11 @@ internal sealed partial class MacWindow
             RefreshChat();return;
         }
         if(chosen.State!="paired"){await Alert("等待对方确认 · 校验码 "+pigeon.Code(chosen));return;}
-        peer=chosen.Key;chatStamp="";chatMessages=new StackPanel{Spacing=9};composer=new TextBox{AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,Watermark="输入消息，最多 2000 字符",MinHeight=65,MaxHeight=160};
+        peer=chosen.Key;chatStamp="";chatMessages=new StackPanel{Spacing=9};var editor=new PigeonComposer{TextWrapping=TextWrapping.Wrap,Watermark="输入消息，Enter 发送 · Ctrl+Enter 换行",MinHeight=65,MaxHeight=160};composer=editor;
         var length=T("0 / 2000",11);composer.TextChanged+=(_,_)=>length.Text=$"{PigeonService.MessageLength(composer.Text??"")} / 2000";
-        var actions=new WrapPanel();actions.Children.Add(B("发送",()=>{pigeon.SendText(chosen.Key,composer.Text??"");composer.Text="";RefreshChat();}));actions.Children.Add(B("发文件",()=>_=Safe(()=>SendFiles(false))));actions.Children.Add(B("发文件夹",()=>_=Safe(()=>SendFiles(true))));actions.Children.Add(length);
-        composer.KeyDown+=(_,e)=>{if(e.Key==Avalonia.Input.Key.Enter&&e.KeyModifiers==Avalonia.Input.KeyModifiers.None){e.Handled=true;Run(()=>{pigeon.SendText(chosen.Key,composer.Text??"");composer.Text="";RefreshChat();});}};
+        void SendMessage(){if(string.IsNullOrWhiteSpace(editor.Text))return;pigeon.SendText(chosen.Key,editor.Text);editor.Clear();RefreshChat();editor.Focus();}
+        var actions=new WrapPanel();actions.Children.Add(B("发送",SendMessage));actions.Children.Add(B("发文件",()=>_=Safe(()=>SendFiles(false))));actions.Children.Add(B("发文件夹",()=>_=Safe(()=>SendFiles(true))));actions.Children.Add(length);
+        editor.SendRequested+=()=>Run(SendMessage);
         chatHost!.Content=Stack(T(chosen.Name,20),B("返回电脑列表",()=>{peer=null;pigeon.SetReadingPeer(null);chatHost.Content=T("选择电脑查看消息");RefreshChat();}),chatMessages,composer,actions);
         Avalonia.Input.DragDrop.SetAllowDrop(chatHost,true);chatHost.AddHandler(Avalonia.Input.DragDrop.DropEvent,(_,e)=>{var destination=peer;if(destination==null)return;_=Safe(async()=>{foreach(var f in e.Data.GetFiles()??[])if(f.TryGetLocalPath() is {} p)await pigeon.SendPath(destination,p);RefreshChat();});e.Handled=true;});RefreshChat();
     }
