@@ -17,4 +17,5 @@ internal sealed class MacStatusBar : IDisposable
     [DllImport("EasyAppKeeper.StatusItem.dylib",EntryPoint="EasyAppKeeperStatusTestClick",CallingConvention=CallingConvention.Cdecl)] internal static extern int TestClick();
     [DllImport("EasyAppKeeper.StatusItem.dylib",EntryPoint="EasyAppKeeperTestDockReopen",CallingConvention=CallingConvention.Cdecl)] internal static extern int TestDockReopen();
     [DllImport("EasyAppKeeper.StatusItem.dylib",EntryPoint="EasyAppKeeperTestTermination",CallingConvention=CallingConvention.Cdecl)] internal static extern int TestTermination();
+    [DllImport("EasyAppKeeper.StatusItem.dylib",EntryPoint="EasyAppKeeperDockRegularCount",CallingConvention=CallingConvention.Cdecl)] internal static extern int DockRegularCount();
 }

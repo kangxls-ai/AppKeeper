@@ -227,6 +227,7 @@ internal sealed partial class MacWindow : Window
         await LauncherInputSmoke();
         await ExternalEntriesSmoke();
         await ActivationSmoke();
+        await DockSmoke();
         await ChatInputSmoke();
         foreach(var width in new[]{1000,360,300})
         {

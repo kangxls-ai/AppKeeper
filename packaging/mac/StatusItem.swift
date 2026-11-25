@@ -65,3 +65,10 @@ public func testTermination() -> Int32 {
     guard let reply = app.delegate?.applicationShouldTerminate?(app) else { return -1 }
     return Int32(reply.rawValue)
 }
+@_cdecl("EasyAppKeeperDockRegularCount")
+public func dockRegularCount() -> Int32 {
+    let root = Bundle.main.bundleURL.standardizedFileURL.path + "/"
+    return Int32(NSWorkspace.shared.runningApplications.filter {
+        $0.activationPolicy == .regular && ($0.executableURL?.standardizedFileURL.path.hasPrefix(root) ?? false)
+    }.count)
+}

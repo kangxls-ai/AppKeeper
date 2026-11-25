@@ -9,7 +9,13 @@ func fail(_ text: String) -> Never {
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else { fail("缺少系统操作。") }
+// Apply to every operation, including icon scans and pasteboard access, before AppKit work.
+// Embedded background-only metadata also prevents a transient/recent Dock tile at launch.
+NSApplication.shared.setActivationPolicy(.prohibited)
 switch arguments[1] {
+case "--helper-policy":
+    let info: [String: Any] = ["Identifier": Bundle.main.bundleIdentifier ?? "", "BackgroundOnly": Bundle.main.object(forInfoDictionaryKey: "LSBackgroundOnly") as? Bool ?? false, "Agent": Bundle.main.object(forInfoDictionaryKey: "LSUIElement") as? Bool ?? false, "Policy": NSRunningApplication.current.activationPolicy.rawValue]
+    FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: info))
 case "--services-update":
     NSUpdateDynamicServices()
 case "--icons":

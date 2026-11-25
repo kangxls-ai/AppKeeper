@@ -5,7 +5,7 @@ output="${1:-artifacts/mac}"
 mkdir -p "$output/EasyAppKeeper.app/Contents/MacOS" "$output/EasyAppKeeper.app/Contents/Resources"
 app="$output/EasyAppKeeper.app"
 dotnet publish src/AppKeeper.Mac/AppKeeper.Mac.csproj -c Release -r osx-arm64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o "$app/Contents/MacOS"
-xcrun swiftc packaging/mac/Native.swift -o "$app/Contents/MacOS/EasyAppKeeper.Native" -framework AppKit -framework Carbon -framework Security -target arm64-apple-macosx14.0
+xcrun swiftc packaging/mac/Native.swift -o "$app/Contents/MacOS/EasyAppKeeper.Native" -framework AppKit -framework Carbon -framework Security -target arm64-apple-macosx14.0 -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker packaging/mac/HelperInfo.plist
 xcrun swiftc packaging/mac/StatusItem.swift -emit-library -o "$app/Contents/MacOS/EasyAppKeeper.StatusItem.dylib" -framework AppKit -target arm64-apple-macosx14.0
 cp packaging/mac/Info.plist "$app/Contents/Info.plist"
 cp THIRD-PARTY-NOTICES.txt "$app/Contents/Resources/THIRD-PARTY-NOTICES.txt"
@@ -25,8 +25,8 @@ find "$app/Contents/MacOS" -type f \( -name '*.dylib' -o -name 'EasyAppKeeper.Na
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 "$app/Contents/MacOS/EasyAppKeeper" --self-test | tee "$output/self-test.txt"
-ditto -c -k --sequesterRsrc --keepParent "$app" "$output/EasyAppKeeper-1.4.6-mac-arm64.zip"
+ditto -c -k --sequesterRsrc --keepParent "$app" "$output/EasyAppKeeper-1.4.7-mac-arm64.zip"
 mkdir -p "$output/dmg-content"
 ditto "$app" "$output/dmg-content/EasyAppKeeper.app"
 ln -sfn /Applications "$output/dmg-content/Applications"
-hdiutil create -volname EasyAppKeeper -srcfolder "$output/dmg-content" -ov -format UDZO "$output/EasyAppKeeper-1.4.6-mac-arm64.dmg"
+hdiutil create -volname EasyAppKeeper -srcfolder "$output/dmg-content" -ov -format UDZO "$output/EasyAppKeeper-1.4.7-mac-arm64.dmg"

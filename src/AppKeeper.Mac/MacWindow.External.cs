@@ -16,8 +16,9 @@ internal sealed partial class MacWindow
     }
     private void StartEntryInbox()
     {
-        entryTimer.Tick+=(_,_)=>_=Safe(DrainExternalEntries);entryTimer.Start();
+        entryTimer.Tick+=(_,_)=>_=Safe(async()=>{ProcessActivationRequest();await DrainExternalEntries();});entryTimer.Start();
     }
+    internal void ProcessActivationRequest(){if(!FinalClose&&MacStartup.ConsumeActivation(state.Root))Reveal(true);}
     private async Task DrainExternalEntries()
     {
         if(addingEntries||FinalClose)return;
